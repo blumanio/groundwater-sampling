@@ -286,6 +286,4 @@ app.post('/api/sites/:siteId/waste-logs', upload.single('wasteImage'), async (re
         res.status(400).send({ message: 'Error creating waste log', error: err.message });
     }
 });
-app.listen(PORT, () => {
-  console.log(`Server is running on port: ${PORT}`);
-});
+module.exports = app;
