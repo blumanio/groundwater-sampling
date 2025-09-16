@@ -1,23 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, LayersControl } from 'react-leaflet';
-import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js';
-import * as XLSX from 'xlsx';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 const API_URL = 'http://localhost:5000/api';
-
-const downloadExcelFile = (buffer, fileName) => {
-    const data = new Blob([buffer], { type: 'application/octet-stream' });
-    const url = window.URL.createObjectURL(data);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', fileName);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-};
 
 const AddPiezometerModal = ({ siteId, onClose, onPiezometerAdded }) => {
     const [name, setName] = useState('');
@@ -149,7 +136,7 @@ const SiteDetail = ({ site, onBack }) => {
                 }),
             });
             if (!response.ok) throw new Error('Failed to save sampling log.');
-            
+
             // Reset form, close modal, and refresh data
             setLogFormData({ depthToWater: '', ph: '', conductivity: '', temperature: '', notes: '' });
             setIsLogFormOpen(false);
@@ -159,25 +146,21 @@ const SiteDetail = ({ site, onBack }) => {
             alert(error.message);
         }
     };
-    
+
     const handleLogFormChange = (e) => {
         const { name, value } = e.target;
-        setLogFormData(prev => ({...prev, [name]: value}));
+        setLogFormData(prev => ({ ...prev, [name]: value }));
     };
 
     const handleGenerateReport = async (samplingEvent) => {
         // ... (this function remains the same)
     };
 
-    const chartData = {
-        // ... (this object remains the same)
-    };
-
     return (
         <div>
-            {isPzFormOpen && 
-                <AddPiezometerModal 
-                    siteId={site._id} 
+            {isPzFormOpen &&
+                <AddPiezometerModal
+                    siteId={site._id}
                     onClose={() => setIsPzFormOpen(false)}
                     onPiezometerAdded={(newPz) => setPiezometers(prev => [...prev, newPz])}
                 />
@@ -216,8 +199,8 @@ const SiteDetail = ({ site, onBack }) => {
                         </div>
                         <div className="space-y-2 max-h-80 overflow-y-auto">
                             {piezometers.map(pz => (
-                                <div key={pz._id} onClick={() => handlePiezometerSelect(pz)} 
-                                     className={`p-2 rounded-md cursor-pointer ${selectedPiezometer?._id === pz._id ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-indigo-100'}`}>
+                                <div key={pz._id} onClick={() => handlePiezometerSelect(pz)}
+                                    className={`p-2 rounded-md cursor-pointer ${selectedPiezometer?._id === pz._id ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-indigo-100'}`}>
                                     {pz.name}
                                 </div>
                             ))}
@@ -246,7 +229,7 @@ const SiteDetail = ({ site, onBack }) => {
                                 <h3 className="font-bold text-lg">Data for {selectedPiezometer.name}</h3>
                                 <button onClick={() => setIsLogFormOpen(true)} className="bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600">+ Add Field Log</button>
                             </div>
-                            
+
                             <div className="mt-4">
                                 <h4 className="font-semibold text-gray-700 mb-2">Sampling History</h4>
                                 <div className="max-h-60 overflow-y-auto border rounded-md">
@@ -289,4 +272,3 @@ const SiteDetail = ({ site, onBack }) => {
 };
 
 export default SiteDetail;
-
