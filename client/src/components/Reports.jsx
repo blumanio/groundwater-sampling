@@ -12,7 +12,7 @@ const Reports = ({ receipts }) => {
         // Fetch receipts for the selected date range
         const response = await fetch(`${API_URL}/receipts?startDate=${reportStartDate}&endDate=${reportEndDate}`);
         const monthlyReceipts = await response.json();
-        
+
         const pdf = new jsPDF();
         let yPos = 20;
 
@@ -33,23 +33,23 @@ const Reports = ({ receipts }) => {
             const imgProps = pdf.getImageProperties(imgData);
             const imgWidth = 50;
             const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-            
+
             const itemHeight = 15 + textHeight + imgHeight + 10;
-            
+
             if (yPos + itemHeight > pdf.internal.pageSize.getHeight() - 20) {
                 pdf.addPage();
                 yPos = 20;
             }
-            
+
             pdf.setFontSize(12);
             pdf.text(`Date: ${receipt.date}`, 10, yPos);
             pdf.text(`Amount: €${receipt.amount.toFixed(2)}`, 140, yPos);
             yPos += 5;
-            
+
             pdf.setFontSize(10);
             pdf.text(textLines, 10, yPos);
             yPos += textHeight;
-            
+
             if (receipt.commessa) {
                 pdf.text(`Project: ${receipt.commessa.CodiceProgettoSAP}`, 10, yPos);
                 yPos += 5;
@@ -63,7 +63,7 @@ const Reports = ({ receipts }) => {
             pdf.line(10, yPos, 200, yPos);
             yPos += 10;
         });
-        
+
         const blob = pdf.output('blob');
         const url = URL.createObjectURL(blob);
         setPreviewPdfUrl(url);
@@ -107,9 +107,9 @@ const Reports = ({ receipts }) => {
                                 <i className="fas fa-times text-xl"></i>
                             </button>
                         </div>
-                        <iframe src={previewPdfUrl} className="w-full flex-grow border-0"></iframe>
+                        <iframe src={previewPdfUrl} title="PDF Preview" className="w-full flex-grow border-0"></iframe>
                         <div className="p-4 border-t border-gray-200 text-right">
-                             <button 
+                            <button
                                 className="bg-indigo-500 text-white py-2 px-4 rounded-md hover:bg-indigo-600 transition-colors"
                                 onClick={() => {
                                     const link = document.createElement('a');
