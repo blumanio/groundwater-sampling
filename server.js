@@ -1,12 +1,18 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const multer = require('multer'); // Add multer for file handling
+const multer = require('multer');
+const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+const path = require('path');
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+
 // Configure multer for in-memory file storage
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
+
 // --- Middleware ---
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -17,20 +23,49 @@ const connection = mongoose.connection;
 connection.once('open', () => {
   console.log('MongoDB database connection established successfully');
 });
-// --- NEW: Schema to store the raw schedule data ---
+
+// --- Configure nodemailer (add your email service configuration) ---
+const transporter = nodemailer.createTransporter({
+    service: 'gmail', // or your email service
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+// --- SCHEMAS ---
+
+// Authentication Schemas
+const LoginCodeSchema = new mongoose.Schema({
+    email: { type: String, required: true },
+    code: { type: String, required: true },
+    expiresAt: { type: Date, required: true }
+});
+const LoginCode = mongoose.model('LoginCode', LoginCodeSchema);
+
+const UserSchema = new mongoose.Schema({
+    email: { type: String, required: true, unique: true },
+    name: String,
+    lastLogin: { type: Date, default: Date.now }
+});
+const User = mongoose.model('User', UserSchema);
+
+// Schedule Data Schema
 const ScheduleDataSchema = new mongoose.Schema({
     fileName: { type: String, required: true },
-    csvContent: { type: String, required: true }, // The raw text content of the CSV
+    csvContent: { type: String, required: true },
     uploadedAt: { type: Date, default: Date.now },
 });
 const ScheduleData = mongoose.model('ScheduleData', ScheduleDataSchema);
-// --- ========== PREVIOUS SCHEMAS (Receipts & Commesse) ========== ---
+
+// Commessa Schema
 const commessaSchema = new mongoose.Schema({
   CodiceProgettoSAP: { type: String, required: true },
   Descrizione: { type: String, required: true },
 });
 const Commessa = mongoose.model('Commesse', commessaSchema);
 
+// Receipt Schema
 const receiptSchema = new mongoose.Schema({
   date: { type: Date, required: true },
   amount: { type: Number, required: true },
@@ -40,50 +75,25 @@ const receiptSchema = new mongoose.Schema({
 });
 const Receipt = mongoose.model('Receipt', receiptSchema);
 
-
-// --- NEW: Waste Log Schema ---
-const WasteLogSchema = new mongoose.Schema({
-    siteId: { type: mongoose.Schema.Types.ObjectId, ref: 'Site', required: true },
-    dateGenerated: { type: Date, default: Date.now },
-    wasteType: { 
-        type: String, 
-        enum: ['Contaminated Water', 'Contaminated Soil', 'Used Absorbents', 'Drilling Cuttings', 'Other'],
-        required: true 
-    },
-    description: { type: String, required: true },
-    eerCode: { type: String, required: true }, // European Waste Catalogue (Codice CER)
-    quantity: { type: Number, required: true },
-    unit: { type: String, enum: ['Liters', 'kg', 'Drums', 'm³'], required: true },
-    storageLocation: { type: String }, // On-site storage description
-    imageUrl: { type: String }, // Path to the uploaded photo
-    status: {
-        type: String,
-        enum: ['Stored On-Site', 'Awaiting Disposal', 'Transported Off-Site', 'Disposed'],
-        default: 'Stored On-Site'
-    },
-});
-const WasteLog = mongoose.model('WasteLog', WasteLogSchema);
-// --- ========== NEW GEOLOGY SCHEMAS ========== ---
-
-// 1. Site Schema: A single project location.
+// Site Schema
 const SiteSchema = new mongoose.Schema({
     name: { type: String, required: true, unique: true },
     client: String,
     address: String,
-    coordinates: { type: [Number], required: true } // [latitude, longitude]
+    coordinates: { type: [Number], required: true }
 });
 const Site = mongoose.model('Site', SiteSchema);
 
-// 2. Piezometer Schema: A well, linked to a Site.
+// Piezometer Schema
 const PiezometerSchema = new mongoose.Schema({
     siteId: { type: mongoose.Schema.Types.ObjectId, ref: 'Site', required: true },
-    name: { type: String, required: true }, // e.g., "PZ-1"
+    name: { type: String, required: true },
     coordinates: { type: [Number], required: true },
     depth: Number
 });
 const Piezometer = mongoose.model('Piezometer', PiezometerSchema);
 
-// 3. SamplingEvent Schema: A record of one sampling event.
+// Sampling Event Schema
 const SamplingEventSchema = new mongoose.Schema({
     piezometerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Piezometer', required: true },
     date: { type: Date, required: true, default: Date.now },
@@ -99,61 +109,51 @@ const SamplingEventSchema = new mongoose.Schema({
 });
 const SamplingEvent = mongoose.model('SamplingEvent', SamplingEventSchema);
 
-
-// --- ========== API ROUTES ========== ---
-
-// --- Previous Routes (Receipts & Commesse) ---
-app.get('/api/receipts', async (req, res) => res.json(await Receipt.find({})));
-app.post('/api/receipts', async (req, res) => res.status(201).json(await new Receipt(req.body).save()));
-app.delete('/api/receipts/:id', async (req, res) => res.json(await Receipt.findByIdAndDelete(req.params.id)));
-app.get('/api/commesse', async (req, res) => res.json(await Commessa.find({})));
-
-
-// --- NEW Geology API Routes ---
-
-// Sites
-app.get('/api/sites', async (req, res) => res.json(await Site.find({})));
-app.post('/api/sites', async (req, res) => res.status(201).json(await new Site(req.body).save()));
-
-// Piezometers (scoped to a site)
-app.get('/api/sites/:siteId/piezometers', async (req, res) => {
-    res.json(await Piezometer.find({ siteId: req.params.siteId }));
+// Waste Log Schema
+const WasteLogSchema = new mongoose.Schema({
+    siteId: { type: mongoose.Schema.Types.ObjectId, ref: 'Site', required: true },
+    dateGenerated: { type: Date, default: Date.now },
+    wasteType: { 
+        type: String, 
+        enum: ['Contaminated Water', 'Contaminated Soil', 'Used Absorbents', 'Drilling Cuttings', 'Other'],
+        required: true 
+    },
+    description: { type: String, required: true },
+    eerCode: { type: String, required: true },
+    quantity: { type: Number, required: true },
+    unit: { type: String, enum: ['Liters', 'kg', 'Drums', 'm³'], required: true },
+    storageLocation: { type: String },
+    imageUrl: { type: String },
+    status: {
+        type: String,
+        enum: ['Stored On-Site', 'Awaiting Disposal', 'Transported Off-Site', 'Disposed'],
+        default: 'Stored On-Site'
+    },
 });
-app.post('/api/sites/:siteId/piezometers', async (req, res) => {
-    const piezometer = new Piezometer({ ...req.body, siteId: req.params.siteId });
-    res.status(201).json(await piezometer.save());
-});
+const WasteLog = mongoose.model('WasteLog', WasteLogSchema);
 
-// Sampling Events (scoped to a piezometer)
-app.get('/api/piezometers/:piezometerId/sampling-events', async (req, res) => {
-    res.json(await SamplingEvent.find({ piezometerId: req.params.piezometerId }).sort({ date: -1 }));
-});
-app.post('/api/piezometers/:piezometerId/sampling-events', async (req, res) => {
-    const event = new SamplingEvent({ ...req.body, piezometerId: req.params.piezometerId });
-    res.status(201).json(await event.save());
+// --- API ROUTES ---
+
+// Health check
+app.get('/api/health', (req, res) => {
+    res.json({ message: 'Server is running', timestamp: new Date().toISOString() });
 });
 
-
-// --- Server Start ---
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-// --- NEW: Authentication API Routes ---
-
-// Step 1: Request a login code
+// Authentication Routes
 app.post('/api/auth/login', async (req, res) => {
-    const { email } = req.body;
-    const allowedDomain = 'yourcompany.com'; // IMPORTANT: Set your company's email domain
-
-    if (!email || !email.endsWith('@' + allowedDomain)) {
-        return res.status(400).json({ message: `Access denied. Please use a valid @${allowedDomain} email.` });
-    }
-
-    const code = Math.floor(100000 + Math.random() * 900000).toString(); // Generate 6-digit code
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
-
     try {
+        const { email } = req.body;
+        const allowedDomain = 'yourcompany.com'; // IMPORTANT: Set your company's email domain
+
+        if (!email || !email.endsWith('@' + allowedDomain)) {
+            return res.status(400).json({ message: `Access denied. Please use a valid @${allowedDomain} email.` });
+        }
+
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
         await LoginCode.findOneAndUpdate({ email }, { email, code, expiresAt }, { upsert: true });
 
-        // Send the email
         await transporter.sendMail({
             from: `"Your WebApp" <${process.env.EMAIL_USER}>`,
             to: email,
@@ -168,18 +168,16 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-// Step 2: Verify the code and get a token
 app.post('/api/auth/verify', async (req, res) => {
-    const { email, code } = req.body;
-
     try {
+        const { email, code } = req.body;
+
         const loginAttempt = await LoginCode.findOne({ email, code, expiresAt: { $gt: new Date() } });
 
         if (!loginAttempt) {
             return res.status(400).json({ message: 'Invalid or expired verification code.' });
         }
 
-        // Code is valid, find or create the user
         let user = await User.findOne({ email });
         if (!user) {
             user = new User({ email, name: email.split('@')[0] });
@@ -187,52 +185,85 @@ app.post('/api/auth/verify', async (req, res) => {
         user.lastLogin = new Date();
         await user.save();
 
-        // Delete the used code
         await LoginCode.deleteOne({ _id: loginAttempt._id });
 
-        // Generate a long-lived token
         const token = jwt.sign({ userId: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
         res.status(200).json({ token, user });
-
     } catch (error) {
+        console.error('Verify error:', error);
         res.status(500).json({ message: 'Error during verification.' });
     }
 });
 
+// Receipt Routes
+app.get('/api/receipts', async (req, res) => {
+    try {
+        const receipts = await Receipt.find({});
+        res.json(receipts);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching receipts', error: error.message });
+    }
+});
 
+app.post('/api/receipts', async (req, res) => {
+    try {
+        const receipt = new Receipt(req.body);
+        const savedReceipt = await receipt.save();
+        res.status(201).json(savedReceipt);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating receipt', error: error.message });
+    }
+});
 
+app.delete('/api/receipts/:id', async (req, res) => {
+    try {
+        const deletedReceipt = await Receipt.findByIdAndDelete(req.params.id);
+        if (!deletedReceipt) {
+            return res.status(404).json({ message: 'Receipt not found' });
+        }
+        res.json(deletedReceipt);
+    } catch (error) {
+        res.status(500).json({ message: 'Error deleting receipt', error: error.message });
+    }
+});
+
+// Commesse Routes
+app.get('/api/commesse', async (req, res) => {
+    try {
+        const commesse = await Commessa.find({});
+        res.json(commesse);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching commesse', error: error.message });
+    }
+});
+
+// Schedule Routes
 app.get('/api/schedule/latest', async (req, res) => {
     try {
-        // Find the most recently uploaded document. Since we only keep one, this will be it.
         const schedule = await ScheduleData.findOne().sort({ uploadedAt: -1 });
         if (!schedule) {
             return res.status(404).json({ message: 'No schedule has been uploaded yet.' });
         }
         res.json(schedule);
     } catch (error) {
-        res.status(500).json({ message: 'Error fetching schedule.' });
+        res.status(500).json({ message: 'Error fetching schedule.', error: error.message });
     }
 });
 
-// POST (upload) a new schedule. This will replace the old one.
-// The 'scheduleFile' string must match the name attribute in the form's file input.
 app.post('/api/schedule/upload', upload.single('scheduleFile'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ message: 'No file uploaded.' });
-    }
-
     try {
-        // Step 1: Delete all existing schedules to ensure only one remains.
+        if (!req.file) {
+            return res.status(400).json({ message: 'No file uploaded.' });
+        }
+
         await ScheduleData.deleteMany({});
 
-        // Step 2: Create a new schedule document with the uploaded file's content.
         const newSchedule = new ScheduleData({
             fileName: req.file.originalname,
             csvContent: req.file.buffer.toString('utf-8'),
         });
 
-        // Step 3: Save the new schedule to the database.
         await newSchedule.save();
 
         res.status(201).json({ 
@@ -245,25 +276,76 @@ app.post('/api/schedule/upload', upload.single('scheduleFile'), async (req, res)
     }
 });
 
+// Site Routes
+app.get('/api/sites', async (req, res) => {
+    try {
+        const sites = await Site.find({});
+        res.json(sites);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching sites', error: error.message });
+    }
+});
 
+app.post('/api/sites', async (req, res) => {
+    try {
+        const site = new Site(req.body);
+        const savedSite = await site.save();
+        res.status(201).json(savedSite);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating site', error: error.message });
+    }
+});
 
+// Piezometer Routes
+app.get('/api/sites/:siteId/piezometers', async (req, res) => {
+    try {
+        const piezometers = await Piezometer.find({ siteId: req.params.siteId });
+        res.json(piezometers);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching piezometers', error: error.message });
+    }
+});
 
+app.post('/api/sites/:siteId/piezometers', async (req, res) => {
+    try {
+        const piezometer = new Piezometer({ ...req.body, siteId: req.params.siteId });
+        const savedPiezometer = await piezometer.save();
+        res.status(201).json(savedPiezometer);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating piezometer', error: error.message });
+    }
+});
 
+// Sampling Event Routes
+app.get('/api/piezometers/:piezometerId/sampling-events', async (req, res) => {
+    try {
+        const events = await SamplingEvent.find({ piezometerId: req.params.piezometerId }).sort({ date: -1 });
+        res.json(events);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching sampling events', error: error.message });
+    }
+});
 
+app.post('/api/piezometers/:piezometerId/sampling-events', async (req, res) => {
+    try {
+        const event = new SamplingEvent({ ...req.body, piezometerId: req.params.piezometerId });
+        const savedEvent = await event.save();
+        res.status(201).json(savedEvent);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating sampling event', error: error.message });
+    }
+});
 
-
-
-// GET all waste logs for a specific site
+// Waste Log Routes
 app.get('/api/sites/:siteId/waste-logs', async (req, res) => {
     try {
         const logs = await WasteLog.find({ siteId: req.params.siteId }).sort({ dateGenerated: -1 });
         res.json(logs);
-    } catch (err) {
-        res.status(500).send({ message: 'Error fetching waste logs' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching waste logs', error: error.message });
     }
 });
 
-// POST a new waste log with an optional image
 app.post('/api/sites/:siteId/waste-logs', upload.single('wasteImage'), async (req, res) => {
     try {
         const { wasteType, description, eerCode, quantity, unit, storageLocation, status } = req.body;
@@ -277,13 +359,39 @@ app.post('/api/sites/:siteId/waste-logs', upload.single('wasteImage'), async (re
             unit,
             storageLocation,
             status,
-            imageUrl: req.file ? `/uploads/${req.file.filename}` : null // Save the accessible URL path
+            imageUrl: req.file ? `/uploads/${req.file.filename}` : null
         });
 
-        await newLog.save();
-        res.status(201).json(newLog);
-    } catch (err) {
-        res.status(400).send({ message: 'Error creating waste log', error: err.message });
+        const savedLog = await newLog.save();
+        res.status(201).json(savedLog);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating waste log', error: error.message });
     }
 });
+
+// Serve static files from React build (only in production)
+if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, 'client/build')));
+    
+    // Handle React routing - this should be LAST
+    app.get('*', (req, res) => {
+        // Don't serve index.html for API routes
+        if (req.path.startsWith('/api/')) {
+            return res.status(404).json({ message: 'API route not found' });
+        }
+        res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+    });
+}
+
+// 404 handler for API routes
+app.use('/api/*', (req, res) => {
+    res.status(404).json({ message: 'API endpoint not found' });
+});
+
+// Start server
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
 module.exports = app;
