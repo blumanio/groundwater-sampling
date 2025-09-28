@@ -31,7 +31,7 @@ const App = () => {
 
     useEffect(() => {
         fetchApiData();
-    }, []);
+    }, [API_URL]);
 
     const renderPage = () => {
         switch (page) {
@@ -41,7 +41,7 @@ const App = () => {
                 return <Receipts receipts={receipts} commesse={commesse} onDataChange={fetchApiData} />;
             case 'schedule':
                 return <Schedule />;
-            
+
             // 2. ADD THE NEW CASE FOR THE GEOLOGY PAGE
             case 'geology':
                 return <GeologyPage />;
