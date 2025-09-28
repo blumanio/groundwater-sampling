@@ -31,7 +31,7 @@ const App = () => {
 
     useEffect(() => {
         fetchApiData();
-    }, [API_URL]);
+    }, []);
 
     const renderPage = () => {
         switch (page) {

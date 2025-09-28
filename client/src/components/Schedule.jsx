@@ -39,8 +39,8 @@ const ActivityModal = ({ content, onClose }) => {
 
 // --- Main Schedule Component ---
 const Schedule = () => {
-   // const { user } = useAuth(); // Get the current logged-in user
-  const API_URL = config.API_URL;
+    // const { user } = useAuth(); // Get the current logged-in user
+    const API_URL = config.API_URL;
 
     // State
     const [employeeSchedules, setEmployeeSchedules] = useState({});
@@ -68,7 +68,7 @@ const Schedule = () => {
                 }
                 const data = await response.json();
                 setScheduleMeta({ fileName: data.fileName, uploadedAt: data.uploadedAt });
-                
+
                 // Parse the CSV content received from the server
                 Papa.parse(data.csvContent, {
                     header: false,
@@ -106,7 +106,7 @@ const Schedule = () => {
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message);
-            
+
             // Success! Now refresh the data from the server
             window.location.reload(); // Simple way to force a full refresh
 
@@ -156,7 +156,7 @@ const Schedule = () => {
         }
         return { schedules, employees: Array.from(employees).sort() };
     };
-    
+
     // --- Memoized Values & Navigation ---
     const filteredEmployees = useMemo(() => {
         if (!searchTerm) return employeeList;
@@ -177,7 +177,7 @@ const Schedule = () => {
         }
         return week;
     }, [currentDate, selectedEmployee, employeeSchedules]);
-    
+
     const navigateWeek = (direction) => {
         setCurrentDate(prevDate => {
             const newDate = new Date(prevDate);
@@ -185,13 +185,13 @@ const Schedule = () => {
             return newDate;
         });
     };
-    
+
     const weekRangeString = `${weekData[0].date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long' })} - ${weekData[6].date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}`;
-    
+
     return (
         <div className="bg-white p-6 rounded-lg shadow-md space-y-6">
             <ActivityModal content={modalContent} onClose={() => setModalContent(null)} />
-            
+
             <header className="flex justify-between items-start">
                 <div>
                     <h2 className="text-2xl font-bold text-gray-800">
@@ -215,7 +215,7 @@ const Schedule = () => {
                     </div>
                 )}
             </header>
-            
+
             {error && <div className="bg-red-100 text-red-700 p-3 rounded-md">{error}</div>}
             {isLoading && employeeList.length === 0 && <p className="text-center text-gray-500">Loading schedule...</p>}
 
@@ -235,7 +235,7 @@ const Schedule = () => {
                             </h3>
                             <button onClick={() => navigateWeek(1)} className="p-2 rounded-full hover:bg-gray-100 transition-colors"><i className="fas fa-chevron-right"></i></button>
                         </div>
-                        
+
                         <div className="grid grid-cols-5 gap-4">
                             <div className="col-span-1 border-r pr-4">
                                 <h4 className="font-bold text-center mb-2">Employees</h4>
