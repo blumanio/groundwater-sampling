@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect } from 'react';
 // import { useAuth } from '../auth/AuthContext'; // Import useAuth to identify the admin
 import Papa from 'papaparse';
 
+import config from '../config';
+//const API_URL = 'http://localhost:5000/api';
 
 // --- Helper Functions & Child Components (No changes needed) ---
 const getStartOfWeek = (date) => {
@@ -38,7 +40,7 @@ const ActivityModal = ({ content, onClose }) => {
 // --- Main Schedule Component ---
 const Schedule = () => {
    // const { user } = useAuth(); // Get the current logged-in user
-    const API_URL = 'http://localhost:5000/api';
+  const API_URL = config.API_URL;
 
     // State
     const [employeeSchedules, setEmployeeSchedules] = useState({});

@@ -3,7 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, LayersControl } from 'react-leaflet';
 import SiteDetail from './SiteDetail';
 
-const API_URL = 'http://localhost:5000/api';
+import config from '../config';
+//const API_URL = 'http://localhost:5000/api';
+const API_URL = config.API_URL;
 
 const GeologyPage = () => {
     const [sites, setSites] = useState([]);

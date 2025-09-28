@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 
-const API_URL = 'http://localhost:5000/api';
+import config from '../config';
+//const API_URL = 'http://localhost:5000/api';
+const API_URL = config.API_URL;
 
 const WasteManagement = ({ siteId }) => {
     const [wasteLogs, setWasteLogs] = useState([]);

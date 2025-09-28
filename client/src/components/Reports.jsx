@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { jsPDF } from 'jspdf';
 
-const API_URL = 'http://localhost:5000/api';
+import config from '../config';
+//const API_URL = 'http://localhost:5000/api';
+const API_URL = config.API_URL;
 
 const Reports = ({ receipts }) => {
     const [reportStartDate, setReportStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);

@@ -3,7 +3,9 @@ import { jsPDF } from 'jspdf';
 // Import a custom helper for Base64 to Blob conversion if needed for production
 // For jspdf, the data URL is usually sufficient.
 
-const API_URL = 'http://localhost:5000/api';
+import config from '../config';
+//const API_URL = 'http://localhost:5000/api';
+const API_URL = config.API_URL;
 
 const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
     // --- State Management ---
