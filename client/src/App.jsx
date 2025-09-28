@@ -57,7 +57,7 @@ const App = () => {
         <div className="min-h-screen bg-gray-100 p-4">
             <div className="max-w-7xl mx-auto"> {/* Increased max-width for better layout */}
                 <header className="bg-white p-4 rounded-lg shadow-md mb-4 flex justify-between items-center">
-                    <h1 className="text-2xl font-bold text-gray-800">Field Operations Hub</h1>
+                    <h1 className="text-2xl font-bold text-gray-800">ACR Reggiani</h1>
                     <Navigation page={page} setPage={setPage} />
                 </header>
                 <main>
