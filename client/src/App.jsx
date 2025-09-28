@@ -5,7 +5,7 @@ import Receipts from './components/Receipts';
 import Reports from './components/Reports';
 import Schedule from './components/Schedule';
 import GeologyPage from './components/GeologyPage'; // 1. IMPORT THE NEW PAGE
-import config from '../config';
+import config from './config';
 //const API_URL = 'http://localhost:5000/api';
 const API_URL = config.API_URL;
 
