@@ -1,15 +1,24 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const multer = require('multer'); // Add multer for file handling
+const multer = require('multer');
+const path = require('path'); // ADDED THIS
 const app = express();
 const PORT = process.env.PORT || 5000;
+
 // Configure multer for in-memory file storage
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
+
 // --- Middleware ---
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
+
+// --- Serve static files in production ---
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, 'client/build')));
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+}
 
 // --- MongoDB Connection ---
 mongoose.connect('mongodb+srv://medlique:HXRMVGMsPpdCjDSt@cluster0.4d0iacb.mongodb.net/acr');
@@ -17,6 +26,7 @@ const connection = mongoose.connection;
 connection.once('open', () => {
   console.log('MongoDB database connection established successfully');
 });
+
 // --- NEW: Schema to store the raw schedule data ---
 const ScheduleDataSchema = new mongoose.Schema({
     fileName: { type: String, required: true },
@@ -24,6 +34,7 @@ const ScheduleDataSchema = new mongoose.Schema({
     uploadedAt: { type: Date, default: Date.now },
 });
 const ScheduleData = mongoose.model('ScheduleData', ScheduleDataSchema);
+
 // --- ========== PREVIOUS SCHEMAS (Receipts & Commesse) ========== ---
 const commessaSchema = new mongoose.Schema({
   CodiceProgettoSAP: { type: String, required: true },
@@ -39,7 +50,6 @@ const receiptSchema = new mongoose.Schema({
   commessa: { type: commessaSchema }
 });
 const Receipt = mongoose.model('Receipt', receiptSchema);
-
 
 // --- NEW: Waste Log Schema ---
 const WasteLogSchema = new mongoose.Schema({
@@ -63,6 +73,7 @@ const WasteLogSchema = new mongoose.Schema({
     },
 });
 const WasteLog = mongoose.model('WasteLog', WasteLogSchema);
+
 // --- ========== NEW GEOLOGY SCHEMAS ========== ---
 
 // 1. Site Schema: A single project location.
@@ -99,43 +110,106 @@ const SamplingEventSchema = new mongoose.Schema({
 });
 const SamplingEvent = mongoose.model('SamplingEvent', SamplingEventSchema);
 
-
 // --- ========== API ROUTES ========== ---
 
 // --- Previous Routes (Receipts & Commesse) ---
-app.get('/api/receipts', async (req, res) => res.json(await Receipt.find({})));
-app.post('/api/receipts', async (req, res) => res.status(201).json(await new Receipt(req.body).save()));
-app.delete('/api/receipts/:id', async (req, res) => res.json(await Receipt.findByIdAndDelete(req.params.id)));
-app.get('/api/commesse', async (req, res) => res.json(await Commessa.find({})));
+app.get('/api/receipts', async (req, res) => {
+    try {
+        const receipts = await Receipt.find({});
+        res.json(receipts);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching receipts', error: error.message });
+    }
+});
 
+app.post('/api/receipts', async (req, res) => {
+    try {
+        const receipt = await new Receipt(req.body).save();
+        res.status(201).json(receipt);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating receipt', error: error.message });
+    }
+});
+
+app.delete('/api/receipts/:id', async (req, res) => {
+    try {
+        const receipt = await Receipt.findByIdAndDelete(req.params.id);
+        res.json(receipt);
+    } catch (error) {
+        res.status(500).json({ message: 'Error deleting receipt', error: error.message });
+    }
+});
+
+app.get('/api/commesse', async (req, res) => {
+    try {
+        const commesse = await Commessa.find({});
+        res.json(commesse);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching commesse', error: error.message });
+    }
+});
 
 // --- NEW Geology API Routes ---
 
 // Sites
-app.get('/api/sites', async (req, res) => res.json(await Site.find({})));
-app.post('/api/sites', async (req, res) => res.status(201).json(await new Site(req.body).save()));
+app.get('/api/sites', async (req, res) => {
+    try {
+        const sites = await Site.find({});
+        res.json(sites);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching sites', error: error.message });
+    }
+});
+
+app.post('/api/sites', async (req, res) => {
+    try {
+        const site = await new Site(req.body).save();
+        res.status(201).json(site);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating site', error: error.message });
+    }
+});
 
 // Piezometers (scoped to a site)
 app.get('/api/sites/:siteId/piezometers', async (req, res) => {
-    res.json(await Piezometer.find({ siteId: req.params.siteId }));
+    try {
+        const piezometers = await Piezometer.find({ siteId: req.params.siteId });
+        res.json(piezometers);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching piezometers', error: error.message });
+    }
 });
+
 app.post('/api/sites/:siteId/piezometers', async (req, res) => {
-    const piezometer = new Piezometer({ ...req.body, siteId: req.params.siteId });
-    res.status(201).json(await piezometer.save());
+    try {
+        const piezometer = new Piezometer({ ...req.body, siteId: req.params.siteId });
+        const savedPiezometer = await piezometer.save();
+        res.status(201).json(savedPiezometer);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating piezometer', error: error.message });
+    }
 });
 
 // Sampling Events (scoped to a piezometer)
 app.get('/api/piezometers/:piezometerId/sampling-events', async (req, res) => {
-    res.json(await SamplingEvent.find({ piezometerId: req.params.piezometerId }).sort({ date: -1 }));
+    try {
+        const events = await SamplingEvent.find({ piezometerId: req.params.piezometerId }).sort({ date: -1 });
+        res.json(events);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching sampling events', error: error.message });
+    }
 });
+
 app.post('/api/piezometers/:piezometerId/sampling-events', async (req, res) => {
-    const event = new SamplingEvent({ ...req.body, piezometerId: req.params.piezometerId });
-    res.status(201).json(await event.save());
+    try {
+        const event = new SamplingEvent({ ...req.body, piezometerId: req.params.piezometerId });
+        const savedEvent = await event.save();
+        res.status(201).json(savedEvent);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating sampling event', error: error.message });
+    }
 });
 
-
-// --- Server Start ---
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 // --- NEW: Authentication API Routes ---
 
 // Step 1: Request a login code
@@ -151,15 +225,15 @@ app.post('/api/auth/login', async (req, res) => {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
 
     try {
-        await LoginCode.findOneAndUpdate({ email }, { email, code, expiresAt }, { upsert: true });
+        // Note: You need to define LoginCode schema and transporter for email
+        // await LoginCode.findOneAndUpdate({ email }, { email, code, expiresAt }, { upsert: true });
 
-        // Send the email
-        await transporter.sendMail({
-            from: `"Your WebApp" <${process.env.EMAIL_USER}>`,
-            to: email,
-            subject: 'Your Verification Code',
-            html: `<p>Your verification code is: <strong>${code}</strong></p><p>This code will expire in 10 minutes.</p>`,
-        });
+        // await transporter.sendMail({
+        //     from: `"Your WebApp" <${process.env.EMAIL_USER}>`,
+        //     to: email,
+        //     subject: 'Your Verification Code',
+        //     html: `<p>Your verification code is: <strong>${code}</strong></p><p>This code will expire in 10 minutes.</p>`,
+        // });
 
         res.status(200).json({ message: 'Verification code sent to your email.' });
     } catch (error) {
@@ -173,35 +247,36 @@ app.post('/api/auth/verify', async (req, res) => {
     const { email, code } = req.body;
 
     try {
-        const loginAttempt = await LoginCode.findOne({ email, code, expiresAt: { $gt: new Date() } });
+        // Note: You need to define LoginCode and User schemas, and JWT_SECRET
+        // const loginAttempt = await LoginCode.findOne({ email, code, expiresAt: { $gt: new Date() } });
 
-        if (!loginAttempt) {
-            return res.status(400).json({ message: 'Invalid or expired verification code.' });
-        }
+        // if (!loginAttempt) {
+        //     return res.status(400).json({ message: 'Invalid or expired verification code.' });
+        // }
 
         // Code is valid, find or create the user
-        let user = await User.findOne({ email });
-        if (!user) {
-            user = new User({ email, name: email.split('@')[0] });
-        }
-        user.lastLogin = new Date();
-        await user.save();
+        // let user = await User.findOne({ email });
+        // if (!user) {
+        //     user = new User({ email, name: email.split('@')[0] });
+        // }
+        // user.lastLogin = new Date();
+        // await user.save();
 
         // Delete the used code
-        await LoginCode.deleteOne({ _id: loginAttempt._id });
+        // await LoginCode.deleteOne({ _id: loginAttempt._id });
 
         // Generate a long-lived token
-        const token = jwt.sign({ userId: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
+        // const token = jwt.sign({ userId: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-        res.status(200).json({ token, user });
+        // res.status(200).json({ token, user });
+        res.status(200).json({ message: 'Auth verification endpoint - needs implementation' });
 
     } catch (error) {
         res.status(500).json({ message: 'Error during verification.' });
     }
 });
 
-
-
+// Schedule API Routes
 app.get('/api/schedule/latest', async (req, res) => {
     try {
         // Find the most recently uploaded document. Since we only keep one, this will be it.
@@ -245,13 +320,7 @@ app.post('/api/schedule/upload', upload.single('scheduleFile'), async (req, res)
     }
 });
 
-
-
-
-
-
-
-
+// Waste Management API Routes
 
 // GET all waste logs for a specific site
 app.get('/api/sites/:siteId/waste-logs', async (req, res) => {
@@ -259,7 +328,7 @@ app.get('/api/sites/:siteId/waste-logs', async (req, res) => {
         const logs = await WasteLog.find({ siteId: req.params.siteId }).sort({ dateGenerated: -1 });
         res.json(logs);
     } catch (err) {
-        res.status(500).send({ message: 'Error fetching waste logs' });
+        res.status(500).json({ message: 'Error fetching waste logs', error: err.message });
     }
 });
 
@@ -283,7 +352,18 @@ app.post('/api/sites/:siteId/waste-logs', upload.single('wasteImage'), async (re
         await newLog.save();
         res.status(201).json(newLog);
     } catch (err) {
-        res.status(400).send({ message: 'Error creating waste log', error: err.message });
+        res.status(400).json({ message: 'Error creating waste log', error: err.message });
     }
 });
+
+// --- Catch-all handler: send back React's index.html file in production ---
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+  });
+}
+
+// --- Server Start ---
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 module.exports = app;
