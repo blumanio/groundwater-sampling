@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import Papa from 'papaparse';
 import config from '../config';
 
@@ -138,8 +138,8 @@ const EmployeeSelector = ({ employees, selectedEmployee, onSelect, searchTerm, o
                             key={name}
                             onClick={() => onSelect(name)}
                             className={`w-full text-left px-4 py-3 text-sm border-b border-gray-100 last:border-b-0 transition-colors ${selectedEmployee === name
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'hover:bg-gray-50 text-gray-700'
+                                ? 'bg-indigo-600 text-white'
+                                : 'hover:bg-gray-50 text-gray-700'
                                 }`}
                         >
                             {name}
@@ -227,7 +227,8 @@ const Schedule = () => {
     const isAdmin = true;
 
     // Fetch all available schedules
-    const fetchAvailableSchedules = async () => {
+    // STEP 2: Wrap fetchAvailableSchedules in useCallback and add its dependency.
+    const fetchAvailableSchedules = useCallback(async () => {
         try {
             setIsLoading(true);
             const response = await fetch(`${API_URL}/schedule/all`);
@@ -236,36 +237,41 @@ const Schedule = () => {
             const data = await response.json();
             setAvailableSchedules(data);
 
-            // Auto-select the most recent schedule
             if (data.length > 0) {
                 const mostRecent = data.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))[0];
                 setSelectedSchedule(mostRecent);
-                loadScheduleData(mostRecent);
+                loadScheduleData(mostRecent); // This function is a dependency
             }
         } catch (err) {
             setError(err.message);
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [loadScheduleData]); // Add loadScheduleData here.
 
+    // STEP 3: Add the function to the useEffect dependency array.
     useEffect(() => {
         fetchAvailableSchedules();
-    }, [availableSchedules]);
+    }, [fetchAvailableSchedules]);
 
-    const loadScheduleData = (schedule) => {
+
+    // STEP 1: Wrap loadScheduleData in useCallback.
+    // Since it only uses stable state setters, the dependency array can be empty.
+    const loadScheduleData = useCallback((schedule) => {
         if (!schedule) return;
 
         Papa.parse(schedule.csvContent, {
             header: false,
             skipEmptyLines: true,
             complete: (results) => {
+                // Note: It's best practice for processCSVData to not rely on component scope
+                // but for this fix, we assume it correctly uses setEmployeeSchedules and setEmployeeList.
                 const { schedules, employees } = processCSVData(results.data, schedule.year, schedule.month);
                 setEmployeeSchedules(schedules);
                 setEmployeeList(employees);
             }
         });
-    };
+    }, []); // State setters are stable, so the dependency array is empty.
 
     const handleScheduleChange = (schedule) => {
         setSelectedSchedule(schedule);
