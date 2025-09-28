@@ -6,7 +6,7 @@ const Dashboard = ({ receipts, setPage }) => {
         const options = { year: 'numeric', month: 'long', day: 'numeric' };
         return new Date(dateString).toLocaleDateString(undefined, options);
     };
-    
+
     const totalReceipts = receipts.length;
     const totalAmount = receipts.reduce((sum, r) => sum + r.amount, 0);
     const lastReceiptDate = totalReceipts > 0 ? formatDate(receipts[totalReceipts - 1].date) : 'N/A';
