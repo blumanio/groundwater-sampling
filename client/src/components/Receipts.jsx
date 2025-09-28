@@ -1,47 +1,57 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
+// Import a custom helper for Base64 to Blob conversion if needed for production
+// For jspdf, the data URL is usually sufficient.
 
 const API_URL = 'http://localhost:5000/api';
 
 const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
     // --- State Management ---
     const [receiptEditImage, setReceiptEditImage] = useState(null);
-    const [textInput, setTextInput] = useState('');
-    const [textX, setTextX] = useState(50);
-    const [textY, setTextY] = useState(50);
-    const [fontSize, setFontSize] = useState(24);
-    const [fontColor, setFontColor] = useState('#000000');
     const [receiptDate, setReceiptDate] = useState(new Date().toISOString().split('T')[0]);
     const [receiptAmount, setReceiptAmount] = useState('');
     const [previewPdfUrl, setPreviewPdfUrl] = useState('');
     const [selectedCommessa, setSelectedCommessa] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [textInput, setTextInput] = useState(''); // Notes
+    const [searchQuery, setSearchQuery] = useState(''); // Project Search
 
     // --- Refs ---
-    const canvasRef = useRef(null);
     const fileInputRef = useRef(null);
 
     // --- Effects ---
     useEffect(() => {
-        if (commesse.length > 0 && !selectedCommessa) {
-            setSelectedCommessa(commesse[0]);
-        }
-    }, [commesse, selectedCommessa]);
-
-    useEffect(() => {
-        if (receiptEditImage && canvasRef.current) {
-            setupCanvas(receiptEditImage, canvasRef.current);
-        }
-    }, [receiptEditImage]);
-
-    useEffect(() => {
+        // Cleanup old PDF blob URL on component unmount or change
         return () => {
             if (previewPdfUrl) {
                 URL.revokeObjectURL(previewPdfUrl);
             }
         };
     }, [previewPdfUrl]);
+
+    // --- Filtered Commesse Logic ---
+    // Step 1: Filter to show only projects starting with 20C1881
+    const baseFilteredCommesse = commesse.filter(c =>
+        c.CodiceProgettoSAP && c.CodiceProgettoSAP.startsWith('20C1880')
+    );
+
+    // Step 2: Apply the search query filter
+    const finalFilteredCommesse = baseFilteredCommesse.filter(c => {
+        const searchString = `${c.CodiceProgettoSAP} ${c.Descrizione}`.toLowerCase();
+        return searchString.includes(searchQuery.toLowerCase());
+    });
+
+    // Step 3: Set initial selected commessa on load or filter change
+    useEffect(() => {
+        if (finalFilteredCommesse.length > 0 && !selectedCommessa) {
+            setSelectedCommessa(finalFilteredCommesse[0]);
+        }
+        // If the current selectedCommessa is filtered out, clear it
+        if (selectedCommessa && !finalFilteredCommesse.includes(selectedCommessa)) {
+            setSelectedCommessa(finalFilteredCommesse[0] || null);
+        }
+    }, [finalFilteredCommesse, selectedCommessa]);
 
     // --- Helper Functions ---
     const formatDate = (dateString) => {
@@ -50,26 +60,14 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
         return new Date(dateString).toLocaleDateString(undefined, options);
     };
 
-    // --- Canvas Drawing Functions ---
-    const setupCanvas = (image, canvasElement) => {
-        const ctx = canvasElement.getContext('2d');
-        const maxWidth = 800;
-        const maxHeight = 600;
-        let { width, height } = image;
-        if (width > maxWidth || height > maxHeight) {
-            const ratio = Math.min(maxWidth / width, maxHeight / height);
-            width *= ratio;
-            height *= ratio;
-        }
-        canvasElement.width = width;
-        canvasElement.height = height;
-        ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        ctx.drawImage(image, 0, 0, width, height);
-    };
-
     const handleFileSelect = (e) => {
         const file = e.target.files[0];
-        if (!file) return;
+        if (!file) {
+            setReceiptEditImage(null);
+            return;
+        }
+
+        // Load image for preview
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
@@ -79,63 +77,6 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
         reader.readAsDataURL(file);
     };
 
-const drawTextOverlay = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (receiptEditImage) {
-        setupCanvas(receiptEditImage, canvas);
-    }
-
-    // --- Text and Style Setup ---
-    const notes = textInput.trim();
-    const commessaProj = `Commessa: ${selectedCommessa?.CodiceElementoWBS || ''}`;
-    const projectText = ` - ${selectedCommessa?.Descrizione.split('-')[1] || ''}`;
-    
-    ctx.font = `${fontSize}px Arial`;
-    // ADDED: Define a background color (semi-transparent white)
-    const backgroundColor = 'rgba(255, 255, 255, 0.75)';
-
-    // --- Helper function to draw text with a background ---
-    const drawTextWithBackground = (text, x, y) => {
-        // 1. Measure the text to get its width
-        const textMetrics = ctx.measureText(text);
-        const textHeight = parseInt(fontSize, 10); // Approximate height
-        const padding = 4;
-
-        // 2. Set the background color and draw the rectangle
-        ctx.fillStyle = backgroundColor;
-        // The Y position is shifted up by the font size because fillText's y is the baseline
-        ctx.fillRect(
-            x - padding, 
-            y - textHeight, 
-            textMetrics.width + (padding * 2), 
-            textHeight + (padding * 2)
-        );
-
-        // 3. Set the text color and draw the actual text on top
-        ctx.fillStyle = fontColor;
-        ctx.fillText(text, x, y);
-    };
-
-    // --- Draw the text layers ---
-    const startX = parseInt(textX, 10);
-    let currentY = parseInt(textY, 10);
-    const lineHeight = parseInt(fontSize, 10) + 10; // Space between lines
-
-    // Draw optional notes first
-    if (notes) {
-        drawTextWithBackground(notes, startX, currentY);
-        currentY += lineHeight; // Move down for the next line
-    }
-    
-    // MODIFIED: Draw the project code and description on two separate lines
-    drawTextWithBackground(commessaProj, startX, currentY);
-    currentY += lineHeight; // Move down for the final line
-    drawTextWithBackground(projectText, startX, currentY);
-};
-
-    // --- Data Handling Functions ---
     const resetForm = () => {
         setReceiptEditImage(null);
         setTextInput('');
@@ -144,22 +85,35 @@ const drawTextOverlay = () => {
         if (fileInputRef.current) fileInputRef.current.value = "";
     };
 
+    // --- Data Handling Functions ---
     const saveReceipt = async () => {
-        const canvas = canvasRef.current;
-        if (!canvas || !receiptAmount || !selectedCommessa) {
-            setError('Please fill out all fields and upload a receipt image.');
+        if (!receiptEditImage || !receiptAmount || !selectedCommessa) {
+            setError('Please fill out all mandatory fields and upload a receipt image.');
             return;
         }
+
+        // Convert image to Data URL for storage
+        const tempCanvas = document.createElement('canvas');
+        const ctx = tempCanvas.getContext('2d');
+
+        // Use original image dimensions (or downscale if needed, but here we just copy the original image)
+        tempCanvas.width = receiptEditImage.width;
+        tempCanvas.height = receiptEditImage.height;
+        ctx.drawImage(receiptEditImage, 0, 0);
+        const imageData = tempCanvas.toDataURL('image/jpeg', 0.9);
+
+
         setError(null);
         setIsLoading(true);
-        drawTextOverlay();
+
         const newReceipt = {
             date: receiptDate,
             amount: parseFloat(receiptAmount),
-            text: textInput,
-            imageData: canvas.toDataURL('image/jpeg', 0.8),
+            text: textInput, // Notes field
+            imageData: imageData, // The full image data
             commessa: selectedCommessa,
         };
+
         try {
             const response = await fetch(`${API_URL}/receipts`, {
                 method: 'POST',
@@ -193,209 +147,257 @@ const drawTextOverlay = () => {
     };
 
     const downloadReceiptPDF = (receipt) => {
-        const pdf = new jsPDF();
-        let yPos = 20;
-        pdf.setFontSize(16);
-        pdf.text('Receipt Details', 10, yPos);
-        yPos += 10;
+        const pdf = new jsPDF('p', 'mm', 'a4'); // 'p' for portrait, 'mm' for units
+        const margin = 10; // mm
+        const textHeight = 5; // mm per line
+        let yPos = margin;
+
+        // --- 1. Draw Text Details (minimal and compact) ---
         pdf.setFontSize(10);
-        pdf.text(`Date: ${formatDate(receipt.date)}`, 10, yPos);
-        yPos += 5;
-        pdf.text(`Amount: €${receipt.amount.toFixed(2)}`, 10, yPos);
-        yPos += 5;
-        pdf.text(`Notes: ${receipt.text || 'No notes'}`, 10, yPos);
-        yPos += 5;
-        if (receipt.commessa) {
-            pdf.text(`Project: ${receipt.commessa.CodiceProgettoSAP}`, 10, yPos);
-            yPos += 5;
-            pdf.text(`Description: ${receipt.commessa.Descrizione}`, 10, yPos);
+        pdf.setTextColor(0, 0, 0);
+
+        pdf.text(`Project: ${receipt.commessa?.selectedCommessa || 'N/A'}`, margin, yPos);
+        yPos += textHeight;
+        pdf.text(`Description: ${receipt.commessa?.Descrizione || 'N/A'}`, margin, yPos);
+        yPos += textHeight;
+
+        pdf.text(`Date: ${formatDate(receipt.date)}`, margin, yPos);
+        yPos += textHeight;
+        pdf.text(`Amount: €${receipt.amount.toFixed(2)}`, margin, yPos);
+        yPos += textHeight;
+
+        if (receipt.text) {
+            pdf.text(`Notes: ${receipt.text}`, margin, yPos);
+            yPos += textHeight;
         }
-        yPos += 10;
+
+        yPos += 5; // Extra space before image
+
+        // --- 2. Draw Receipt Image (optimized for single page/max space) ---
         const imgData = receipt.imageData;
         const imgProps = pdf.getImageProperties(imgData);
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const imgWidth = 120;
-        const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-        const xOffset = (pdfWidth - imgWidth) / 2;
-        if (yPos + imgHeight > pdf.internal.pageSize.getHeight() - 10) {
-            pdf.addPage();
-            yPos = 20;
+
+        // A4 dimensions in mm: 210 x 297
+        const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
+        const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
+
+        // Available width for image (minus margins)
+        const availableWidth = pdfWidth - (margin * 2); // 190mm
+
+        // Calculate image height based on available width and image aspect ratio
+        let imgWidth = availableWidth;
+        let imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+
+        // Check if the image will fit vertically below the text.
+        const remainingHeight = pdfHeight - yPos - margin;
+
+        if (imgHeight > remainingHeight) {
+            // Image is too tall, scale it down to fit the remaining height
+            imgHeight = remainingHeight;
+            imgWidth = (imgProps.width * imgHeight) / imgProps.height;
         }
+
+        // Center the image horizontally
+        const xOffset = (pdfWidth - imgWidth) / 2;
+
+        // Image must fit on one page. If the text pushed the Y position too far,
+        // we've already scaled the image down above. If the image height is still
+        // very large (e.g., a panoramic image), this is where it forces the scale.
+
         pdf.addImage(imgData, 'JPEG', xOffset, yPos, imgWidth, imgHeight);
+
         const blob = pdf.output('blob');
         const url = URL.createObjectURL(blob);
         setPreviewPdfUrl(url);
     };
 
+
     return (
-        <div>
+        <div className="min-h-screen bg-gray-50 p-3 sm:p-6 md:p-8">
+            <h1 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-2">
+                Expense Receipts 🧾
+            </h1>
+
+            {/* Error Message */}
             {error && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md relative mb-4" role="alert">
-                    <strong className="font-bold">Error: </strong>
-                    <span className="block sm:inline">{error}</span>
-                    <button onClick={() => setError(null)} className="absolute top-0 bottom-0 right-0 px-4 py-3">
-                        <i className="fas fa-times"></i>
-                    </button>
+                <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg mb-4" role="alert">
+                    <p className="font-bold">Operation Failed</p>
+                    <p>{error}</p>
                 </div>
             )}
 
-            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-                {/* ADDED: Complete form content */}
-                <h2 className="text-lg font-semibold text-gray-800 mb-4">
-                    <i className="fas fa-plus-circle text-indigo-500 mr-2"></i>Add New Receipt
+            {/* --- Add New Receipt Form (Mobile-First Card) --- */}
+            <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg mb-6 border border-indigo-200">
+                <h2 className="text-xl font-semibold text-indigo-700 mb-4 flex items-center">
+                    <i className="fas fa-upload mr-3"></i>Upload New Expense
                 </h2>
+
                 <div className="space-y-4">
+
+                    {/* Project Search Input */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Project</label>
+                        <label className="block text-sm font-medium text-gray-700">Search Project (20C1881-based)</label>
+                        <input
+                            type="text"
+                            placeholder="Type code or description to filter..."
+                            className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+
+                    {/* Project Dropdown (Using filtered list) */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Selected Project</label>
                         <select
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                            className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 bg-white"
                             value={selectedCommessa?.CodiceProgettoSAP || ''}
                             onChange={(e) => {
-                                const selected = commesse.find(c => c.CodiceProgettoSAP === e.target.value);
+                                const selected = finalFilteredCommesse.find(c => c.CodiceProgettoSAP === e.target.value);
                                 setSelectedCommessa(selected || null);
                             }}
                         >
-                            <option value="">-- Select a Project --</option>
-                            {commesse.map(c => (
+                            <option value="" disabled>-- Select a Project --</option>
+                            {finalFilteredCommesse.map(c => (
                                 <option key={c.CodiceProgettoSAP} value={c.CodiceProgettoSAP}>
                                     {c.CodiceProgettoSAP} - {c.Descrizione}
                                 </option>
                             ))}
                         </select>
+                        {finalFilteredCommesse.length === 0 && searchQuery && (
+                            <p className="text-xs text-red-500 mt-1">
+                                No projects found matching filter. Clear search to see all 20C1881 projects.
+                            </p>
+                        )}
                     </div>
+
+                    {/* Date and Amount Grid */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Date</label>
+                            <input
+                                type="date"
+                                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm"
+                                value={receiptDate}
+                                onChange={(e) => setReceiptDate(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Amount (€)</label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                placeholder="0.00"
+                                className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm"
+                                value={receiptAmount}
+                                onChange={(e) => setReceiptAmount(e.target.value)}
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    {/* Notes Input */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Date</label>
+                        <label className="block text-sm font-medium text-gray-700">Notes / Restaurant Name (Optional)</label>
                         <input
-                            type="date"
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                            value={receiptDate}
-                            onChange={(e) => setReceiptDate(e.target.value)}
-                            required
+                            type="text"
+                            className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm"
+                            value={textInput}
+                            onChange={(e) => setTextInput(e.target.value)}
+                            placeholder="e.g., Lunch with client, Restaurant 'La Buona Forchetta'"
                         />
                     </div>
+
+                    {/* File Upload */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Amount (€)</label>
-                        <input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                            value={receiptAmount}
-                            onChange={(e) => setReceiptAmount(e.target.value)}
-                            required
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Upload Receipt</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Receipt Image (JPEG/PNG)</label>
                         <div
-                            className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md cursor-pointer hover:border-indigo-500 transition-colors"
+                            className={`mt-1 flex justify-center px-4 pt-4 pb-4 border-2 ${receiptEditImage ? 'border-indigo-500' : 'border-gray-300'} border-dashed rounded-lg cursor-pointer hover:border-indigo-500 transition-colors`}
                             onClick={() => fileInputRef.current.click()}
                         >
                             <div className="space-y-1 text-center">
-                                <i className="fas fa-cloud-upload-alt text-4xl text-gray-400"></i>
-                                <p className="text-sm text-gray-600">Click to upload or take a photo</p>
+                                <i className={`fas ${receiptEditImage ? 'fa-check-circle text-green-500' : 'fa-camera text-4xl text-gray-400'}`}></i>
+                                <p className="text-sm text-gray-600">
+                                    {receiptEditImage ? 'Image Selected. Click to change.' : 'Tap here to upload or take a photo'}
+                                </p>
                             </div>
                         </div>
                         <input ref={fileInputRef} id="fileInput" type="file" accept="image/*" onChange={handleFileSelect} className="sr-only" />
                     </div>
+
+                    {/* Image Preview (Optional) */}
+                    {receiptEditImage && (
+                        <div className="mt-2 text-center border rounded-lg p-2 bg-gray-50">
+                            <p className="text-sm font-medium text-gray-600 mb-2">Image Preview:</p>
+                            <img
+                                src={receiptEditImage.src}
+                                alt="Receipt Preview"
+                                className="max-w-full h-auto max-h-40 mx-auto rounded"
+                            />
+                        </div>
+                    )}
+
+                    {/* Save Button */}
+                    <button
+                        className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center font-semibold disabled:opacity-50"
+                        onClick={saveReceipt}
+                        disabled={isLoading || !selectedCommessa || !receiptAmount || !receiptEditImage}
+                    >
+                        <i className={`fas ${isLoading ? 'fa-spinner fa-spin' : 'fa-save'} mr-2`}></i>
+                        {isLoading ? 'Saving...' : 'Save Receipt'}
+                    </button>
                 </div>
             </div>
 
-            {receiptEditImage && (
-                <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-                     <h2 className="text-lg font-semibold text-gray-800 mb-4">
-                        <i className="fas fa-edit text-indigo-500 mr-2"></i>Edit and Save
-                    </h2>
-                    <canvas ref={canvasRef} className="w-full h-auto border border-gray-300 rounded-md mb-4"></canvas>
-                    {/* ADDED: Canvas and edit controls */}
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Notes (optional)</label>
-                            <input
-                                type="text"
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-                                value={textInput}
-                                onChange={(e) => setTextInput(e.target.value)}
-                                placeholder="e.g., Lunch with client"
-                            />
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">X Pos</label>
-                                <input type="number" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value={textX} onChange={(e) => setTextX(e.target.value)} />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Y Pos</label>
-                                <input type="number" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value={textY} onChange={(e) => setTextY(e.target.value)} />
-                            </div>
-                             <div>
-                                <label className="block text-sm font-medium text-gray-700">Font Size</label>
-                                <input type="number" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" value={fontSize} onChange={(e) => setFontSize(e.target.value)} />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Color</label>
-                                <input type="color" className="mt-1 block w-full rounded-md border-gray-300 shadow-sm h-10" value={fontColor} onChange={(e) => setFontColor(e.target.value)} />
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex gap-4 mt-4">
-                        <button className="w-full bg-gray-600 text-white py-2 px-4 rounded-md hover:bg-gray-700 transition-colors flex items-center justify-center disabled:opacity-50" onClick={drawTextOverlay} disabled={isLoading}>
-                            <i className="fas fa-eye mr-2"></i>Preview Text
-                        </button>
-                        <button className="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition-colors flex items-center justify-center disabled:opacity-50" onClick={saveReceipt} disabled={isLoading}>
-                            <i className={`fas ${isLoading ? 'fa-spinner fa-spin' : 'fa-save'} mr-2`}></i>
-                            {isLoading ? 'Saving...' : 'Save Receipt'}
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            <div className="bg-white p-6 rounded-lg shadow-md mt-6">
-                <h2 className="text-lg font-semibold text-gray-800">
-                    <i className="fas fa-history text-indigo-500 mr-2"></i>Recent Receipts
+            {/* --- Recent Receipts List --- */}
+            <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg mt-6">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
+                    <i className="fas fa-history mr-3"></i>Recent Receipts
                 </h2>
-                <div className="space-y-4 mt-4">
+                <div className="space-y-3">
                     {receipts.length === 0 ? (
                         <div className="text-center text-gray-500 py-10">
-                            <i className="fas fa-receipt text-5xl mb-4"></i>
-                            <p>No receipts found. Add one using the form above.</p>
+                            <i className="fas fa-receipt text-5xl mb-4 text-gray-300"></i>
+                            <p>No receipts found. Add one above.</p>
                         </div>
                     ) : (
-                        receipts.slice().sort((a, b) => new Date(b.date) - new Date(a.date)).map(receipt => (
-                            <div key={receipt._id} className="bg-gray-100 p-4 rounded-md flex items-center justify-between hover:bg-gray-200 transition-colors">
-                                {/* ADDED: Receipt details */}
-                                <div>
-                                    <p className="font-bold text-lg text-gray-800">€{receipt.amount.toFixed(2)}</p>
-                                    <p className="text-sm text-gray-600">{formatDate(receipt.date)}</p>
-                                    <p className="text-xs text-gray-500">{receipt.commessa?.CodiceProgettoSAP} - {receipt.text || 'No notes'}</p>
+                        receipts.slice()
+                            .sort((a, b) => new Date(b.date) - new Date(a.date))
+                            .map(receipt => (
+                                <div key={receipt._id} className="bg-gray-50 p-3 rounded-lg flex items-center justify-between hover:bg-gray-100 transition-colors border border-gray-200">
+                                    <div className="flex-1 min-w-0 pr-3">
+                                        <p className="font-bold text-lg text-gray-800">€{receipt.amount.toFixed(2)}</p>
+                                        <p className="text-xs sm:text-sm text-gray-600 truncate">{receipt.commessa?.CodiceProgettoSAP} | {formatDate(receipt.date)}</p>
+                                        <p className="text-xs text-gray-500 truncate mt-0.5">{receipt.text || 'No notes'}</p>
+                                    </div>
+                                    <div className="flex items-center space-x-2 sm:space-x-3">
+                                        <button className="text-gray-500 hover:text-indigo-600 p-2" title="View PDF" onClick={() => downloadReceiptPDF(receipt)}>
+                                            <i className="fas fa-file-pdf fa-lg"></i>
+                                        </button>
+                                        <button className="text-gray-500 hover:text-red-600 p-2" title="Delete Receipt" onClick={() => deleteReceipt(receipt._id)} disabled={isLoading}>
+                                            <i className="fas fa-trash fa-lg"></i>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="flex items-center space-x-3">
-                                    {/* ADDED: PDF button */}
-                                    <button className="text-gray-500 hover:text-indigo-600" title="View PDF" onClick={() => downloadReceiptPDF(receipt)}>
-                                        <i className="fas fa-file-pdf fa-lg"></i>
-                                    </button>
-                                    <button className="text-gray-500 hover:text-red-600" title="Delete Receipt" onClick={() => deleteReceipt(receipt._id)} disabled={isLoading}>
-                                        <i className="fas fa-trash fa-lg"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        ))
+                            ))
                     )}
                 </div>
             </div>
 
+            {/* --- PDF Modal Preview --- */}
             {previewPdfUrl && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl h-full max-h-[90vh] flex flex-col overflow-hidden">
-                        <div className="p-4 flex justify-between items-center border-b border-gray-200">
-                            <h3 className="text-xl font-semibold">PDF Preview</h3>
+                <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-0 sm:p-4 z-50">
+                    <div className="bg-white rounded-t-lg sm:rounded-lg shadow-2xl w-full h-full sm:max-w-2xl sm:h-[90vh] flex flex-col overflow-hidden">
+                        <div className="p-4 flex justify-between items-center border-b border-gray-200 bg-gray-50">
+                            <h3 className="text-lg font-semibold text-gray-800">PDF Preview</h3>
                             <button className="text-gray-500 hover:text-gray-700" onClick={() => setPreviewPdfUrl('')}>
                                 <i className="fas fa-times text-xl"></i>
                             </button>
                         </div>
                         <iframe src={previewPdfUrl} title="PDF Preview" className="w-full flex-grow border-0"></iframe>
                         <div className="p-4 border-t border-gray-200 text-right">
-                            <a href={previewPdfUrl} download={`receipt-${new Date().toISOString().split('T')[0]}.pdf`} className="bg-indigo-500 text-white py-2 px-4 rounded-md hover:bg-indigo-600 transition-colors inline-block">
+                            <a href={previewPdfUrl} download={`receipt-${new Date().toISOString().split('T')[0]}.pdf`} className="bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors inline-flex items-center font-medium">
                                 <i className="fas fa-download mr-2"></i>Download PDF
                             </a>
                         </div>
