@@ -225,7 +225,23 @@ const Schedule = () => {
     const [uploadMonth, setUploadMonth] = useState(new Date().getMonth());
 
     const isAdmin = true;
+    // STEP 1: Wrap loadScheduleData in useCallback.
+    // Since it only uses stable state setters, the dependency array can be empty.
+    const loadScheduleData = useCallback((schedule) => {
+        if (!schedule) return;
 
+        Papa.parse(schedule.csvContent, {
+            header: false,
+            skipEmptyLines: true,
+            complete: (results) => {
+                // Note: It's best practice for processCSVData to not rely on component scope
+                // but for this fix, we assume it correctly uses setEmployeeSchedules and setEmployeeList.
+                const { schedules, employees } = processCSVData(results.data, schedule.year, schedule.month);
+                setEmployeeSchedules(schedules);
+                setEmployeeList(employees);
+            }
+        });
+    }, []); // State setters are stable, so the dependency array is empty.
     // Fetch all available schedules
     // STEP 2: Wrap fetchAvailableSchedules in useCallback and add its dependency.
     const fetchAvailableSchedules = useCallback(async () => {
@@ -255,23 +271,7 @@ const Schedule = () => {
     }, [fetchAvailableSchedules]);
 
 
-    // STEP 1: Wrap loadScheduleData in useCallback.
-    // Since it only uses stable state setters, the dependency array can be empty.
-    const loadScheduleData = useCallback((schedule) => {
-        if (!schedule) return;
 
-        Papa.parse(schedule.csvContent, {
-            header: false,
-            skipEmptyLines: true,
-            complete: (results) => {
-                // Note: It's best practice for processCSVData to not rely on component scope
-                // but for this fix, we assume it correctly uses setEmployeeSchedules and setEmployeeList.
-                const { schedules, employees } = processCSVData(results.data, schedule.year, schedule.month);
-                setEmployeeSchedules(schedules);
-                setEmployeeList(employees);
-            }
-        });
-    }, []); // State setters are stable, so the dependency array is empty.
 
     const handleScheduleChange = (schedule) => {
         setSelectedSchedule(schedule);
