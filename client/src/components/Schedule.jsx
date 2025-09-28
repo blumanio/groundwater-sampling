@@ -251,7 +251,7 @@ const Schedule = () => {
 
     useEffect(() => {
         fetchAvailableSchedules();
-    }, [fetchAvailableSchedules]);
+    }, [availableSchedules]);
 
     const loadScheduleData = (schedule) => {
         if (!schedule) return;
