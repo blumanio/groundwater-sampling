@@ -25,9 +25,9 @@ const Navigation = ({ page, setPage }) => {
             <nav className="md:hidden bg-white border-b border-gray-200 sticky top-0 z-50">
                 <div className="px-4 py-3">
                     <div className="flex items-center justify-between">
-                        <h1 className="text-lg font-semibold text-gray-800">
+                        {/* <h1 className="text-lg font-semibold text-gray-800">
                             Groundwater App
-                        </h1>
+                        </h1> */}
                         <button
                             onClick={() => setIsMenuOpen(!isMenuOpen)}
                             className="p-2 rounded-md text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"

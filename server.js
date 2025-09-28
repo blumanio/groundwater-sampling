@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const multer = require('multer');
-const path = require('path'); // ADDED THIS
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -16,38 +16,41 @@ app.use(express.json({ limit: '50mb' }));
 
 // --- Serve static files in production ---
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, 'client/build')));
-  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+    app.use(express.static(path.join(__dirname, 'client/build')));
+    app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 }
 
 // --- MongoDB Connection ---
 mongoose.connect('mongodb+srv://medlique:HXRMVGMsPpdCjDSt@cluster0.4d0iacb.mongodb.net/acr');
 const connection = mongoose.connection;
 connection.once('open', () => {
-  console.log('MongoDB database connection established successfully');
+    console.log('MongoDB database connection established successfully');
 });
 
-// --- NEW: Schema to store the raw schedule data ---
+// --- UPDATED: Schema to store the raw schedule data with year and month ---
 const ScheduleDataSchema = new mongoose.Schema({
     fileName: { type: String, required: true },
     csvContent: { type: String, required: true }, // The raw text content of the CSV
+    year: { type: Number, required: true },
+    month: { type: Number, required: true }, // 0-based (0 = January)
     uploadedAt: { type: Date, default: Date.now },
 });
 const ScheduleData = mongoose.model('ScheduleData', ScheduleDataSchema);
 
+
 // --- ========== PREVIOUS SCHEMAS (Receipts & Commesse) ========== ---
 const commessaSchema = new mongoose.Schema({
-  CodiceProgettoSAP: { type: String, required: true },
-  Descrizione: { type: String, required: true },
+    CodiceProgettoSAP: { type: String, required: true },
+    Descrizione: { type: String, required: true },
 });
 const Commessa = mongoose.model('Commesse', commessaSchema);
 
 const receiptSchema = new mongoose.Schema({
-  date: { type: Date, required: true },
-  amount: { type: Number, required: true },
-  text: { type: String },
-  imageData: { type: String, required: true },
-  commessa: { type: commessaSchema }
+    date: { type: Date, required: true },
+    amount: { type: Number, required: true },
+    text: { type: String },
+    imageData: { type: String, required: true },
+    commessa: { type: commessaSchema }
 });
 const Receipt = mongoose.model('Receipt', receiptSchema);
 
@@ -55,10 +58,10 @@ const Receipt = mongoose.model('Receipt', receiptSchema);
 const WasteLogSchema = new mongoose.Schema({
     siteId: { type: mongoose.Schema.Types.ObjectId, ref: 'Site', required: true },
     dateGenerated: { type: Date, default: Date.now },
-    wasteType: { 
-        type: String, 
+    wasteType: {
+        type: String,
         enum: ['Contaminated Water', 'Contaminated Soil', 'Used Absorbents', 'Drilling Cuttings', 'Other'],
-        required: true 
+        required: true
     },
     description: { type: String, required: true },
     eerCode: { type: String, required: true }, // European Waste Catalogue (Codice CER)
@@ -150,7 +153,6 @@ app.get('/api/commesse', async (req, res) => {
 });
 
 // --- NEW Geology API Routes ---
-
 // Sites
 app.get('/api/sites', async (req, res) => {
     try {
@@ -210,118 +212,65 @@ app.post('/api/piezometers/:piezometerId/sampling-events', async (req, res) => {
     }
 });
 
-// --- NEW: Authentication API Routes ---
-
-// Step 1: Request a login code
-app.post('/api/auth/login', async (req, res) => {
-    const { email } = req.body;
-    const allowedDomain = 'yourcompany.com'; // IMPORTANT: Set your company's email domain
-
-    if (!email || !email.endsWith('@' + allowedDomain)) {
-        return res.status(400).json({ message: `Access denied. Please use a valid @${allowedDomain} email.` });
-    }
-
-    const code = Math.floor(100000 + Math.random() * 900000).toString(); // Generate 6-digit code
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
-
-    try {
-        // Note: You need to define LoginCode schema and transporter for email
-        // await LoginCode.findOneAndUpdate({ email }, { email, code, expiresAt }, { upsert: true });
-
-        // await transporter.sendMail({
-        //     from: `"Your WebApp" <${process.env.EMAIL_USER}>`,
-        //     to: email,
-        //     subject: 'Your Verification Code',
-        //     html: `<p>Your verification code is: <strong>${code}</strong></p><p>This code will expire in 10 minutes.</p>`,
-        // });
-
-        res.status(200).json({ message: 'Verification code sent to your email.' });
-    } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ message: 'Error sending verification code.' });
-    }
+// --- NEW: Authentication API Routes (Placeholder) ---
+app.post('/api/auth/login', (req, res) => {
+    res.status(200).json({ message: 'Auth login endpoint - needs implementation' });
+});
+app.post('/api/auth/verify', (req, res) => {
+    res.status(200).json({ message: 'Auth verification endpoint - needs implementation' });
 });
 
-// Step 2: Verify the code and get a token
-app.post('/api/auth/verify', async (req, res) => {
-    const { email, code } = req.body;
+// --- ========== UPDATED SCHEDULE API ROUTES ========== ---
 
+// **NEW**: GET all available schedules for the dropdown selector on the front-end.
+app.get('/api/schedule/all', async (req, res) => {
     try {
-        // Note: You need to define LoginCode and User schemas, and JWT_SECRET
-        // const loginAttempt = await LoginCode.findOne({ email, code, expiresAt: { $gt: new Date() } });
-
-        // if (!loginAttempt) {
-        //     return res.status(400).json({ message: 'Invalid or expired verification code.' });
-        // }
-
-        // Code is valid, find or create the user
-        // let user = await User.findOne({ email });
-        // if (!user) {
-        //     user = new User({ email, name: email.split('@')[0] });
-        // }
-        // user.lastLogin = new Date();
-        // await user.save();
-
-        // Delete the used code
-        // await LoginCode.deleteOne({ _id: loginAttempt._id });
-
-        // Generate a long-lived token
-        // const token = jwt.sign({ userId: user._id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-        // res.status(200).json({ token, user });
-        res.status(200).json({ message: 'Auth verification endpoint - needs implementation' });
-
-    } catch (error) {
-        res.status(500).json({ message: 'Error during verification.' });
-    }
-});
-
-// Schedule API Routes
-app.get('/api/schedule/latest', async (req, res) => {
-    try {
-        // Find the most recently uploaded document. Since we only keep one, this will be it.
-        const schedule = await ScheduleData.findOne().sort({ uploadedAt: -1 });
-        if (!schedule) {
-            return res.status(404).json({ message: 'No schedule has been uploaded yet.' });
+        // Find all schedules and sort by the upload date to show the most recent first.
+        const schedules = await ScheduleData.find({}).sort({ uploadedAt: -1 });
+        if (!schedules || schedules.length === 0) {
+            return res.status(404).json({ message: 'No schedules have been uploaded yet.' });
         }
-        res.json(schedule);
+        res.json(schedules);
     } catch (error) {
-        res.status(500).json({ message: 'Error fetching schedule.' });
+        res.status(500).json({ message: 'Error fetching schedules.', error: error.message });
     }
 });
 
-// POST (upload) a new schedule. This will replace the old one.
-// The 'scheduleFile' string must match the name attribute in the form's file input.
+// **UPDATED**: POST (upload) a new schedule for a specific month and year.
 app.post('/api/schedule/upload', upload.single('scheduleFile'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ message: 'No file uploaded.' });
     }
 
-    try {
-        // Step 1: Delete all existing schedules to ensure only one remains.
-        await ScheduleData.deleteMany({});
+    if (!req.body.year || !req.body.month) {
+        return res.status(400).json({ message: 'Year and month are required.' });
+    }
 
-        // Step 2: Create a new schedule document with the uploaded file's content.
+    try {
+        const year = parseInt(req.body.year);
+        const month = parseInt(req.body.month);
+
+        // NOTE: We no longer delete old schedules. Each upload is a new entry.
+
         const newSchedule = new ScheduleData({
             fileName: req.file.originalname,
             csvContent: req.file.buffer.toString('utf-8'),
+            year: year,
+            month: month,
         });
 
-        // Step 3: Save the new schedule to the database.
         await newSchedule.save();
 
-        res.status(201).json({ 
-            message: 'Schedule updated successfully.',
-            fileName: newSchedule.fileName,
-            uploadedAt: newSchedule.uploadedAt 
+        res.status(201).json({
+            message: 'Schedule uploaded successfully.',
+            schedule: newSchedule
         });
     } catch (error) {
         res.status(500).json({ message: 'Error saving schedule.', error: error.message });
     }
 });
 
-// Waste Management API Routes
-
+// --- Waste Management API Routes ---
 // GET all waste logs for a specific site
 app.get('/api/sites/:siteId/waste-logs', async (req, res) => {
     try {
@@ -336,7 +285,7 @@ app.get('/api/sites/:siteId/waste-logs', async (req, res) => {
 app.post('/api/sites/:siteId/waste-logs', upload.single('wasteImage'), async (req, res) => {
     try {
         const { wasteType, description, eerCode, quantity, unit, storageLocation, status } = req.body;
-        
+
         const newLog = new WasteLog({
             siteId: req.params.siteId,
             wasteType,
@@ -346,7 +295,7 @@ app.post('/api/sites/:siteId/waste-logs', upload.single('wasteImage'), async (re
             unit,
             storageLocation,
             status,
-            imageUrl: req.file ? `/uploads/${req.file.filename}` : null // Save the accessible URL path
+            imageUrl: req.file ? `/uploads/${req.file.filename}` : null
         });
 
         await newLog.save();
@@ -356,11 +305,11 @@ app.post('/api/sites/:siteId/waste-logs', upload.single('wasteImage'), async (re
     }
 });
 
-// --- Catch-all handler: send back React's index.html file in production ---
+// --- Catch-all handler for production ---
 if (process.env.NODE_ENV === 'production') {
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
-  });
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, 'client/build', 'index.html'));
+    });
 }
 
 // --- Server Start ---
