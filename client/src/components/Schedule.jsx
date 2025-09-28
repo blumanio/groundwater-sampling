@@ -87,7 +87,7 @@ const Schedule = () => {
         };
 
         fetchLatestSchedule();
-    }, []);
+    }, [API_URL]);
 
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
