@@ -476,7 +476,7 @@ const Schedule = () => {
                                                 if (isWeekend) {
                                                     bgColor = 'bg-gray-50';
                                                 } else if (taskInfo) {
-                                                    const hue = taskInfo.task.length * 10 % 360;
+                                                   // const hue = taskInfo.task.length * 10 % 360;
                                                     bgColor = `bg-indigo-50`;
                                                     borderColor = 'border-indigo-200';
                                                 }
