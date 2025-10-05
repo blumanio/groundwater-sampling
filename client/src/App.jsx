@@ -6,7 +6,7 @@ function App() {
     const token = localStorage.getItem('token');
 
     // If there is no login token, show the Login page
-    if (!token) {
+    if (token) {
         return <Login />;
     }
 
