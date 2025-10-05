@@ -1,69 +1,111 @@
 import React, { useState } from 'react';
 import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable'; // [FIX] Changed the import
 
 import config from '../config';
-//const API_URL = 'http://localhost:5000/api';
 const API_URL = config.API_URL;
 
-const Reports = ({ receipts }) => {
+const Reports = () => {
     const [reportStartDate, setReportStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
     const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
     const [previewPdfUrl, setPreviewPdfUrl] = useState('');
 
     const generateReport = async () => {
-        // Fetch receipts for the selected date range
         const response = await fetch(`${API_URL}/receipts?startDate=${reportStartDate}&endDate=${reportEndDate}`);
         const monthlyReceipts = await response.json();
 
-        const pdf = new jsPDF();
-        let yPos = 20;
+        if (monthlyReceipts.length === 0) {
+            alert("No receipts found for the selected date range.");
+            return;
+        }
 
-        pdf.setFontSize(16);
-        pdf.text('Monthly Meal Report', 10, yPos);
-        yPos += 10;
-        pdf.setFontSize(10);
-        pdf.text(`Period: ${reportStartDate} to ${reportEndDate}`, 10, yPos);
-        yPos += 10;
-        pdf.text(`Generated: ${new Date().toLocaleDateString()}`, 10, yPos);
-        yPos += 15;
+        const pdf = new jsPDF();
+
+        // --- PAGE 1: SUMMARY TABLE ---
+        const totalAmount = monthlyReceipts.reduce((sum, receipt) => sum + receipt.amount, 0);
+        const tableColumn = ["Date", "Project Code", "Description", "Amount (€)"];
+        const tableRows = [];
 
         monthlyReceipts.forEach(receipt => {
-            const textLines = pdf.splitTextToSize(`Notes: ${receipt.text || 'No notes'}`, 130);
-            const lineHeight = 7;
-            const textHeight = textLines.length * lineHeight;
-            const imgData = receipt.imageData;
-            const imgProps = pdf.getImageProperties(imgData);
-            const imgWidth = 50;
-            const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+            const receiptData = [
+                new Date(receipt.date).toLocaleDateString(),
+                receipt.commessa ? receipt.commessa.CodiceProgettoSAP : 'N/A',
+                receipt.text || 'No notes',
+                receipt.amount.toFixed(2)
+            ];
+            tableRows.push(receiptData);
+        });
 
-            const itemHeight = 15 + textHeight + imgHeight + 10;
-
-            if (yPos + itemHeight > pdf.internal.pageSize.getHeight() - 20) {
-                pdf.addPage();
-                yPos = 20;
+        pdf.setFontSize(18);
+        pdf.text('Monthly Meal Report Summary', 14, 22);
+        pdf.setFontSize(11);
+        pdf.text(`Period: ${new Date(reportStartDate).toLocaleDateString()} to ${new Date(reportEndDate).toLocaleDateString()}`, 14, 30);
+        
+        // [FIX] Changed the function call
+        autoTable(pdf, {
+            head: [tableColumn],
+            body: tableRows,
+            startY: 40,
+            theme: 'striped',
+            headStyles: { fillColor: [79, 70, 229] },
+            didDrawPage: (data) => {
+                const tableBottomY = data.cursor.y;
+                pdf.setFontSize(12);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(`Total Amount: €${totalAmount.toFixed(2)}`, data.settings.margin.left, tableBottomY + 10);
             }
+        });
 
-            pdf.setFontSize(12);
-            pdf.text(`Date: ${receipt.date}`, 10, yPos);
-            pdf.text(`Amount: €${receipt.amount.toFixed(2)}`, 140, yPos);
-            yPos += 5;
+        // --- SUBSEQUENT PAGES: ONE RECEIPT PER PAGE ---
+        monthlyReceipts.forEach(receipt => {
+            pdf.addPage();
+            let yPos = 20;
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const margin = 15;
+
+            pdf.setFontSize(14);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text(`Date: ${new Date(receipt.date).toLocaleDateString()}`, margin, yPos);
+            
+            pdf.setFontSize(14);
+            pdf.text(`Amount: €${receipt.amount.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
+            yPos += 10;
+
+            pdf.setLineWidth(0.5);
+            pdf.line(margin, yPos - 5, pageWidth - margin, yPos - 5);
 
             pdf.setFontSize(10);
-            pdf.text(textLines, 10, yPos);
-            yPos += textHeight;
+            pdf.setFont('helvetica', 'normal');
 
             if (receipt.commessa) {
-                pdf.text(`Project: ${receipt.commessa.CodiceProgettoSAP}`, 10, yPos);
-                yPos += 5;
-                pdf.text(`Description: ${receipt.commessa.Descrizione}`, 10, yPos);
-                yPos += 5;
+                pdf.text(`Project: ${receipt.commessa.CodiceProgettoSAP} - ${receipt.commessa.Descrizione}`, margin, yPos);
+                yPos += 7;
             }
 
-            pdf.addImage(imgData, 'JPEG', 10, yPos, imgWidth, imgHeight);
-            yPos += imgHeight + 10;
+            const notesLines = pdf.splitTextToSize(`Notes: ${receipt.text || 'No notes'}`, pageWidth - (2 * margin));
+            pdf.text(notesLines, margin, yPos);
+            yPos += notesLines.length * 5 + 5;
 
-            pdf.line(10, yPos, 200, yPos);
-            yPos += 10;
+            const imgData = receipt.imageData;
+            const imgProps = pdf.getImageProperties(imgData);
+            
+            const availableWidth = pageWidth - 2 * margin;
+            const availableHeight = pageHeight - yPos - margin;
+
+            const imgRatio = imgProps.width / imgProps.height;
+            
+            let finalWidth = availableWidth;
+            let finalHeight = finalWidth / imgRatio;
+
+            if (finalHeight > availableHeight) {
+                finalHeight = availableHeight;
+                finalWidth = finalHeight * imgRatio;
+            }
+
+            const xPos = (pageWidth - finalWidth) / 2;
+
+            pdf.addImage(imgData, 'JPEG', xPos, yPos, finalWidth, finalHeight);
         });
 
         const blob = pdf.output('blob');
@@ -102,7 +144,7 @@ const Reports = ({ receipts }) => {
             </button>
             {previewPdfUrl && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl h-full max-h-[90vh] flex flex-col overflow-hidden">
+                    <div className="bg-white rounded-lg shadow-lg w-full max-w-4xl h-full max-h-[90vh] flex flex-col overflow-hidden">
                         <div className="p-4 flex justify-between items-center border-b border-gray-200">
                             <h3 className="text-xl font-semibold">PDF Preview</h3>
                             <button className="text-gray-500 hover:text-gray-700" onClick={() => setPreviewPdfUrl('')}>

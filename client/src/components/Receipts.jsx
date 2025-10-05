@@ -54,6 +54,7 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
             setSelectedCommessa(finalFilteredCommesse[0] || null);
         }
     }, [finalFilteredCommesse, selectedCommessa]);
+        console.log('Generating PDF for receipt:', selectedCommessa);
 
     // --- Helper Functions ---
     const formatDate = (dateString) => {
@@ -301,7 +302,7 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
 
                     {/* Notes Input */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Notes / Restaurant Name (Optional)</label>
+                        <label className="block text-sm font-medium text-gray-700">Note / se hai pagato per qualcuno</label>
                         <input
                             type="text"
                             className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm"
