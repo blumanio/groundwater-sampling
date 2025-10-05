@@ -12,3 +12,7 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+/* In your global CSS file, e.g., index.css */
+:root {
+  --color-primary-deep-blue: #3730a3; /* Indigo-700 equivalent, for consistency */
+}

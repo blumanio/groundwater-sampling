@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable'; // [FIX] Changed the import
+import autoTable from 'jspdf-autotable';
 
 import config from '../config';
 const API_URL = config.API_URL;
@@ -22,16 +22,41 @@ const Reports = () => {
         const pdf = new jsPDF();
 
         // --- PAGE 1: SUMMARY TABLE ---
-        const totalAmount = monthlyReceipts.reduce((sum, receipt) => sum + receipt.amount, 0);
-        const tableColumn = ["Date", "Project Code", "Description", "Amount (€)"];
+        const totalReimbursableAmount = monthlyReceipts.reduce((sum, receipt) => {
+            const numPeople = 1 + (receipt.peoplePaidFor?.length || 0);
+            const maxReimbursement = numPeople * 13;
+            const reimbursableAmount = Math.min(receipt.amount, maxReimbursement);
+            return sum + reimbursableAmount;
+        }, 0);
+
+        // [MODIFIED] Added "Project Phase" column header
+        const tableColumn = ["Date", "Project Phase", "Description / Guests", "No. of People", "Amount (€)", "Reimbursable (€)"];
         const tableRows = [];
 
         monthlyReceipts.forEach(receipt => {
+            const numPeople = 1 + (receipt.peoplePaidFor?.length || 0);
+            const maxReimbursement = numPeople * 13;
+            const reimbursableAmount = Math.min(receipt.amount, maxReimbursement);
+
+            const descriptionParts = [];
+            if (receipt.peoplePaidFor && receipt.peoplePaidFor.length > 0) {
+                descriptionParts.push(`Guests: ${receipt.peoplePaidFor.join(', ')}`);
+            }
+            if (receipt.text) {
+                descriptionParts.push(receipt.text);
+            }
+            const descriptionText = descriptionParts.length > 0 ? descriptionParts.join('. ') : 'No notes';
+
+            // [NEW] Extract the project phase from the description
+            const projectPhase = (receipt.commessa?.Descrizione || '').split('-')[0].trim();
+
             const receiptData = [
                 new Date(receipt.date).toLocaleDateString(),
-                receipt.commessa ? receipt.commessa.CodiceProgettoSAP : 'N/A',
-                receipt.text || 'No notes',
-                receipt.amount.toFixed(2)
+                projectPhase, // Add the new data to the row
+                descriptionText,
+                numPeople,
+                receipt.amount.toFixed(2),
+                reimbursableAmount.toFixed(2)
             ];
             tableRows.push(receiptData);
         });
@@ -40,8 +65,7 @@ const Reports = () => {
         pdf.text('Monthly Meal Report Summary', 14, 22);
         pdf.setFontSize(11);
         pdf.text(`Period: ${new Date(reportStartDate).toLocaleDateString()} to ${new Date(reportEndDate).toLocaleDateString()}`, 14, 30);
-        
-        // [FIX] Changed the function call
+
         autoTable(pdf, {
             head: [tableColumn],
             body: tableRows,
@@ -52,7 +76,7 @@ const Reports = () => {
                 const tableBottomY = data.cursor.y;
                 pdf.setFontSize(12);
                 pdf.setFont('helvetica', 'bold');
-                pdf.text(`Total Amount: €${totalAmount.toFixed(2)}`, data.settings.margin.left, tableBottomY + 10);
+                pdf.text(`Total Reimbursable Amount: €${totalReimbursableAmount.toFixed(2)}`, data.settings.margin.left, tableBottomY + 10);
             }
         });
 
@@ -63,12 +87,11 @@ const Reports = () => {
             const pageHeight = pdf.internal.pageSize.getHeight();
             const pageWidth = pdf.internal.pageSize.getWidth();
             const margin = 15;
+            const pageContentWidth = pageWidth - (margin * 2);
 
             pdf.setFontSize(14);
             pdf.setFont('helvetica', 'bold');
             pdf.text(`Date: ${new Date(receipt.date).toLocaleDateString()}`, margin, yPos);
-            
-            pdf.setFontSize(14);
             pdf.text(`Amount: €${receipt.amount.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
             yPos += 10;
 
@@ -82,29 +105,32 @@ const Reports = () => {
                 pdf.text(`Project: ${receipt.commessa.CodiceProgettoSAP} - ${receipt.commessa.Descrizione}`, margin, yPos);
                 yPos += 7;
             }
+            
+            if (receipt.peoplePaidFor && receipt.peoplePaidFor.length > 0) {
+                const guestText = `Guests: ${receipt.peoplePaidFor.join(', ')}`;
+                const guestLines = pdf.splitTextToSize(guestText, pageContentWidth);
+                pdf.setFont('helvetica', 'bold');
+                pdf.text(guestLines, margin, yPos);
+                pdf.setFont('helvetica', 'normal');
+                yPos += (guestLines.length * 5) + 2;
+            }
 
-            const notesLines = pdf.splitTextToSize(`Notes: ${receipt.text || 'No notes'}`, pageWidth - (2 * margin));
+            const notesLines = pdf.splitTextToSize(`Notes: ${receipt.text || 'No notes'}`, pageContentWidth);
             pdf.text(notesLines, margin, yPos);
             yPos += notesLines.length * 5 + 5;
 
             const imgData = receipt.imageData;
             const imgProps = pdf.getImageProperties(imgData);
-            
             const availableWidth = pageWidth - 2 * margin;
             const availableHeight = pageHeight - yPos - margin;
-
             const imgRatio = imgProps.width / imgProps.height;
-            
             let finalWidth = availableWidth;
             let finalHeight = finalWidth / imgRatio;
-
             if (finalHeight > availableHeight) {
                 finalHeight = availableHeight;
                 finalWidth = finalHeight * imgRatio;
             }
-
             const xPos = (pageWidth - finalWidth) / 2;
-
             pdf.addImage(imgData, 'JPEG', xPos, yPos, finalWidth, finalHeight);
         });
 

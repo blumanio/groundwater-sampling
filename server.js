@@ -3,8 +3,13 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 const app = express();
 const PORT = process.env.PORT || 5000;
+const { put } = require('@vercel/blob'); // [MODIFIED] Import `put` from Vercel Blob
+require('dotenv').config(); // This line loads variables from .env
+
 
 // Configure multer for in-memory file storage
 const storage = multer.memoryStorage();
@@ -36,7 +41,18 @@ const ScheduleDataSchema = new mongoose.Schema({
     uploadedAt: { type: Date, default: Date.now },
 });
 const ScheduleData = mongoose.model('ScheduleData', ScheduleDataSchema);
+// A simple schema for whitelisted users
+const userSchema = new mongoose.Schema({
+    email: { type: String, required: true, unique: true, lowercase: true }
+});
+const User = mongoose.model('User', userSchema);
 
+// A schema to store the master password securely
+const settingSchema = new mongoose.Schema({
+    key: { type: String, required: true, unique: true },
+    value: { type: String, required: true }
+});
+const Setting = mongoose.model('Setting', settingSchema);
 
 // --- ========== PREVIOUS SCHEMAS (Receipts & Commesse) ========== ---
 const commessaSchema = new mongoose.Schema({
@@ -50,7 +66,11 @@ const receiptSchema = new mongoose.Schema({
     amount: { type: Number, required: true },
     text: { type: String },
     imageData: { type: String, required: true },
-    commessa: { type: commessaSchema }
+    commessa: { type: commessaSchema },
+    peoplePaidFor: {
+        type: [String],
+        default: [] // Defaults to an empty array
+    }
 });
 const Receipt = mongoose.model('Receipt', receiptSchema);
 
@@ -125,12 +145,48 @@ app.get('/api/receipts', async (req, res) => {
     }
 });
 
-app.post('/api/receipts', async (req, res) => {
+// --- [MODIFIED] POST /api/receipts Route ---
+// This now uses Vercel Blob for the upload.
+app.post('/api/receipts', upload.single('receiptImage'), async (req, res) => {
+    // Better Error Message: Check if a file was even uploaded.
+    if (!req.file) {
+        return res.status(400).json({ message: 'Receipt image is required. Please upload a file.' });
+    }
+
+    // The filename that will be stored in Vercel Blob.
+    // We add a timestamp to ensure it's unique.
+    const filename = `receipts/${Date.now()}-${req.file.originalname}`;
+
     try {
-        const receipt = await new Receipt(req.body).save();
+        // 1. Upload the file from memory to Vercel Blob
+        const blob = await put(filename, req.file.buffer, {
+            access: 'public', // Makes the blob publicly accessible via its URL
+        });
+
+        // 2. Prepare the new receipt data for MongoDB
+        const newReceiptData = {
+            ...req.body,
+            amount: parseFloat(req.body.amount),
+            // [MODIFIED] Save the public URL from the Vercel Blob response
+            imageData: blob.url,
+        };
+
+        // 3. Save the receipt metadata (including the new URL) to the database
+        const receipt = new Receipt(newReceiptData);
+        await receipt.save();
+
         res.status(201).json(receipt);
+
     } catch (error) {
-        res.status(400).json({ message: 'Error creating receipt', error: error.message });
+        // 4. Better Error Message: Catch errors from any step
+        console.error("Error during receipt creation:", error);
+
+        // Check if the error is from Vercel Blob or a general server error
+        if (error.code === 'BAD_REQUEST' || error.message.includes('Vercel Blob')) {
+            return res.status(500).json({ message: 'Failed to upload image to cloud storage. Please try again.' });
+        }
+
+        res.status(500).json({ message: 'An unexpected server error occurred.', error: error.message });
     }
 });
 
@@ -142,7 +198,41 @@ app.delete('/api/receipts/:id', async (req, res) => {
         res.status(500).json({ message: 'Error deleting receipt', error: error.message });
     }
 });
+app.post('/api/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
 
+        // 1. Check if the email is on the approved list
+        const approvedUser = await User.findOne({ email: email.toLowerCase() });
+        if (!approvedUser) {
+            return res.status(401).json({ message: "Email address not authorized." });
+        }
+
+        // 2. Get the securely stored master password
+        const masterPasswordSetting = await Setting.findOne({ key: 'masterPassword' });
+        if (!masterPasswordSetting) {
+            return res.status(500).json({ message: "System error: Master password not set." });
+        }
+
+        // 3. Compare the provided password with the stored hash
+        const isMatch = await bcrypt.compare(password, masterPasswordSetting.value);
+        if (!isMatch) {
+            return res.status(401).json({ message: "Incorrect password." });
+        }
+
+        // 4. If everything is correct, create a session token (JWT)
+        const token = jwt.sign(
+            { email: approvedUser.email },
+            process.env.JWT_SECRET, // IMPORTANT: Create a JWT_SECRET in your Vercel env variables
+            { expiresIn: '1d' } // Token expires in 1 day
+        );
+
+        res.json({ message: "Login successful!", token });
+
+    } catch (error) {
+        res.status(500).json({ message: 'Server error during login.', error: error.message });
+    }
+});
 app.get('/api/commesse', async (req, res) => {
     try {
         const commesse = await Commessa.find({});
@@ -152,8 +242,64 @@ app.get('/api/commesse', async (req, res) => {
     }
 });
 
-// --- NEW Geology API Routes ---
-// Sites
+// --- Geology API Routes ---
+
+// [ADDED] Get Sites with PZ Completion Summary for the main list/map view
+app.get('/api/sites/summary', async (req, res) => {
+    try {
+        const sites = await Site.aggregate([
+            // Step 1: Join with the piezometers collection
+            {
+                $lookup: {
+                    from: 'piezometers',
+                    localField: '_id',
+                    foreignField: 'siteId',
+                    as: 'piezometers'
+                }
+            },
+            // Step 2: Unwind the piezometers array to process each one individually
+            {
+                $unwind: {
+                    path: '$piezometers',
+                    preserveNullAndEmptyArrays: true // Keep sites that have no piezometers
+                }
+            },
+            // Step 3: Join each piezometer with its sampling events
+            {
+                $lookup: {
+                    from: 'samplingevents',
+                    localField: 'piezometers._id',
+                    foreignField: 'piezometerId',
+                    as: 'events'
+                }
+            },
+            // Step 4: Add a field to check if a piezometer has been sampled
+            {
+                $addFields: {
+                    hasSampled: { $gt: [{ $size: '$events' }, 0] }
+                }
+            },
+            // Step 5: Group back by the original site to count the totals
+            {
+                $group: {
+                    _id: '$_id',
+                    name: { $first: '$name' },
+                    client: { $first: '$client' },
+                    address: { $first: '$address' },
+                    coordinates: { $first: '$coordinates' },
+                    totalPZs: { $sum: { $cond: ['$piezometers', 1, 0] } }, // Count only if piezometer exists
+                    completedPZs: { $sum: { $cond: ['$hasSampled', 1, 0] } } // Count only if it has been sampled
+                }
+            }
+        ]);
+        res.json(sites);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching site summary', error: error.message });
+    }
+});
+
+
+// Sites (Standard GET and POST)
 app.get('/api/sites', async (req, res) => {
     try {
         const sites = await Site.find({});
@@ -237,34 +383,32 @@ app.get('/api/schedule/all', async (req, res) => {
 });
 
 // **UPDATED**: POST (upload) a new schedule for a specific month and year.
-app.post('/api/schedule/upload', upload.single('scheduleFile'), async (req, res) => {
-    if (!req.file) {
-        return res.status(400).json({ message: 'No file uploaded.' });
-    }
-
-    if (!req.body.year || !req.body.month) {
-        return res.status(400).json({ message: 'Year and month are required.' });
+app.post('/api/schedule/upload', uploadSchedule.single('scheduleFile'), async (req, res) => {
+    if (!req.file || !req.body.year || !req.body.month) {
+        return res.status(400).json({ message: 'File, year, and month are required.' });
     }
 
     try {
-        const year = parseInt(req.body.year);
-        const month = parseInt(req.body.month);
+        const filter = {
+            year: parseInt(req.body.year),
+            month: parseInt(req.body.month)
+        };
 
-        // NOTE: We no longer delete old schedules. Each upload is a new entry.
-
-        const newSchedule = new ScheduleData({
+        const update = {
             fileName: req.file.originalname,
             csvContent: req.file.buffer.toString('utf-8'),
-            year: year,
-            month: month,
+            uploadedAt: new Date()
+        };
+
+        // Find a document with the same year/month and update it,
+        // or create a new one if it doesn't exist (upsert: true).
+        const updatedSchedule = await ScheduleData.findOneAndUpdate(filter, update, {
+            new: true,    // Return the updated document
+            upsert: true  // Create a new document if one doesn't exist
         });
 
-        await newSchedule.save();
+        res.status(200).json({ message: 'Schedule uploaded and processed successfully.', schedule: updatedSchedule });
 
-        res.status(201).json({
-            message: 'Schedule uploaded successfully.',
-            schedule: newSchedule
-        });
     } catch (error) {
         res.status(500).json({ message: 'Error saving schedule.', error: error.message });
     }

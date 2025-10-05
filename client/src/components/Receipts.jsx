@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { jsPDF } from 'jspdf';
-// Import a custom helper for Base64 to Blob conversion if needed for production
-// For jspdf, the data URL is usually sufficient.
 
 import config from '../config';
-//const API_URL = 'http://localhost:5000/api';
 const API_URL = config.API_URL;
 
 const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
@@ -16,15 +13,17 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
     const [selectedCommessa, setSelectedCommessa] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [textInput, setTextInput] = useState(''); // Notes
-    const [searchQuery, setSearchQuery] = useState(''); // Project Search
+    const [textInput, setTextInput] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+
+    const [isMultiPerson, setIsMultiPerson] = useState(false);
+    const [peoplePaidFor, setPeoplePaidFor] = useState([]);
 
     // --- Refs ---
     const fileInputRef = useRef(null);
 
     // --- Effects ---
     useEffect(() => {
-        // Cleanup old PDF blob URL on component unmount or change
         return () => {
             if (previewPdfUrl) {
                 URL.revokeObjectURL(previewPdfUrl);
@@ -33,28 +32,21 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
     }, [previewPdfUrl]);
 
     // --- Filtered Commesse Logic ---
-    // Step 1: Filter to show only projects starting with 20C1881
     const baseFilteredCommesse = commesse.filter(c =>
-        c.CodiceProgettoSAP && c.CodiceProgettoSAP.startsWith('20C1880')
+        c.CodiceProgettoSAP && (c.CodiceProgettoSAP.startsWith('20C1881') )
     );
-
-    // Step 2: Apply the search query filter
     const finalFilteredCommesse = baseFilteredCommesse.filter(c => {
         const searchString = `${c.CodiceProgettoSAP} ${c.Descrizione}`.toLowerCase();
         return searchString.includes(searchQuery.toLowerCase());
     });
-
-    // Step 3: Set initial selected commessa on load or filter change
     useEffect(() => {
         if (finalFilteredCommesse.length > 0 && !selectedCommessa) {
             setSelectedCommessa(finalFilteredCommesse[0]);
         }
-        // If the current selectedCommessa is filtered out, clear it
         if (selectedCommessa && !finalFilteredCommesse.includes(selectedCommessa)) {
             setSelectedCommessa(finalFilteredCommesse[0] || null);
         }
     }, [finalFilteredCommesse, selectedCommessa]);
-        console.log('Generating PDF for receipt:', selectedCommessa);
 
     // --- Helper Functions ---
     const formatDate = (dateString) => {
@@ -69,8 +61,6 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
             setReceiptEditImage(null);
             return;
         }
-
-        // Load image for preview
         const reader = new FileReader();
         reader.onload = (event) => {
             const img = new Image();
@@ -85,7 +75,23 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
         setTextInput('');
         setReceiptAmount('');
         setReceiptDate(new Date().toISOString().split('T')[0]);
+        setIsMultiPerson(false);
+        setPeoplePaidFor([]);
         if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    const handlePersonNameChange = (index, value) => {
+        const updatedPeople = [...peoplePaidFor];
+        updatedPeople[index] = value;
+        setPeoplePaidFor(updatedPeople);
+    };
+
+    const addPersonInput = () => {
+        setPeoplePaidFor([...peoplePaidFor, '']);
+    };
+
+    const removePersonInput = (index) => {
+        setPeoplePaidFor(peoplePaidFor.filter((_, i) => i !== index));
     };
 
     // --- Data Handling Functions ---
@@ -95,16 +101,12 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
             return;
         }
 
-        // Convert image to Data URL for storage
         const tempCanvas = document.createElement('canvas');
         const ctx = tempCanvas.getContext('2d');
-
-        // Use original image dimensions (or downscale if needed, but here we just copy the original image)
         tempCanvas.width = receiptEditImage.width;
         tempCanvas.height = receiptEditImage.height;
         ctx.drawImage(receiptEditImage, 0, 0);
         const imageData = tempCanvas.toDataURL('image/jpeg', 0.9);
-
 
         setError(null);
         setIsLoading(true);
@@ -112,9 +114,10 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
         const newReceipt = {
             date: receiptDate,
             amount: parseFloat(receiptAmount),
-            text: textInput, // Notes field
-            imageData: imageData, // The full image data
+            text: textInput,
+            imageData: imageData,
             commessa: selectedCommessa,
+            peoplePaidFor: isMultiPerson ? peoplePaidFor.filter(name => name.trim() !== '') : [],
         };
 
         try {
@@ -150,63 +153,55 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
     };
 
     const downloadReceiptPDF = (receipt) => {
-        const pdf = new jsPDF('p', 'mm', 'a4'); // 'p' for portrait, 'mm' for units
-        const margin = 10; // mm
-        const textHeight = 5; // mm per line
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const margin = 10;
+        const textHeight = 5;
         let yPos = margin;
+        const pageContentWidth = pdf.internal.pageSize.getWidth() - (margin * 2);
 
-        // --- 1. Draw Text Details (minimal and compact) ---
         pdf.setFontSize(10);
         pdf.setTextColor(0, 0, 0);
 
-        pdf.text(`Project: ${receipt.commessa?.selectedCommessa || 'N/A'}`, margin, yPos);
+        // [FIX] Corrected `selectedCommessa` to `CodiceProgettoSAP`
+        pdf.text(`Commessa: ${receipt.commessa.Descrizione.split('-')[0]} - ${receipt.commessa.Descrizione.split('-')[2] || 'N/A'}`, margin, yPos);
         yPos += textHeight;
-        pdf.text(`Description: ${receipt.commessa?.Descrizione || 'N/A'}`, margin, yPos);
-        yPos += textHeight;
-
+        
         pdf.text(`Date: ${formatDate(receipt.date)}`, margin, yPos);
         yPos += textHeight;
         pdf.text(`Amount: €${receipt.amount.toFixed(2)}`, margin, yPos);
         yPos += textHeight;
 
+        // --- [NEW] Add guest names if they exist ---
+        if (receipt.peoplePaidFor && receipt.peoplePaidFor.length > 0) {
+            const guestText = `Paid for: ${receipt.peoplePaidFor.join(', ')}`;
+            const guestLines = pdf.splitTextToSize(guestText, pageContentWidth);
+            pdf.text(guestLines, margin, yPos);
+            yPos += textHeight * guestLines.length;
+        }
+        // --- [END OF NEW] ---
+
         if (receipt.text) {
-            pdf.text(`Notes: ${receipt.text}`, margin, yPos);
-            yPos += textHeight;
+            const notesLines = pdf.splitTextToSize(`Notes: ${receipt.text}`, pageContentWidth);
+            pdf.text(notesLines, margin, yPos);
+            yPos += textHeight * notesLines.length;
         }
 
-        yPos += 5; // Extra space before image
+        yPos += 5;
 
-        // --- 2. Draw Receipt Image (optimized for single page/max space) ---
         const imgData = receipt.imageData;
         const imgProps = pdf.getImageProperties(imgData);
-
-        // A4 dimensions in mm: 210 x 297
-        const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
-        const pdfHeight = pdf.internal.pageSize.getHeight(); // 297mm
-
-        // Available width for image (minus margins)
-        const availableWidth = pdfWidth - (margin * 2); // 190mm
-
-        // Calculate image height based on available width and image aspect ratio
-        let imgWidth = availableWidth;
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        let imgWidth = pageContentWidth;
         let imgHeight = (imgProps.height * imgWidth) / imgProps.width;
-
-        // Check if the image will fit vertically below the text.
         const remainingHeight = pdfHeight - yPos - margin;
 
         if (imgHeight > remainingHeight) {
-            // Image is too tall, scale it down to fit the remaining height
             imgHeight = remainingHeight;
             imgWidth = (imgProps.width * imgHeight) / imgProps.height;
         }
 
-        // Center the image horizontally
         const xOffset = (pdfWidth - imgWidth) / 2;
-
-        // Image must fit on one page. If the text pushed the Y position too far,
-        // we've already scaled the image down above. If the image height is still
-        // very large (e.g., a panoramic image), this is where it forces the scale.
-
         pdf.addImage(imgData, 'JPEG', xOffset, yPos, imgWidth, imgHeight);
 
         const blob = pdf.output('blob');
@@ -221,7 +216,6 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
                 Expense Receipts 🧾
             </h1>
 
-            {/* Error Message */}
             {error && (
                 <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-lg mb-4" role="alert">
                     <p className="font-bold">Operation Failed</p>
@@ -229,17 +223,13 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
                 </div>
             )}
 
-            {/* --- Add New Receipt Form (Mobile-First Card) --- */}
             <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg mb-6 border border-indigo-200">
                 <h2 className="text-xl font-semibold text-indigo-700 mb-4 flex items-center">
                     <i className="fas fa-upload mr-3"></i>Upload New Expense
                 </h2>
-
                 <div className="space-y-4">
-
-                    {/* Project Search Input */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Search Project (20C1881-based)</label>
+                        <label className="block text-sm font-medium text-gray-700">Search Project (20C1880/1-based)</label>
                         <input
                             type="text"
                             placeholder="Type code or description to filter..."
@@ -248,8 +238,6 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
-
-                    {/* Project Dropdown (Using filtered list) */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Selected Project</label>
                         <select
@@ -269,12 +257,10 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
                         </select>
                         {finalFilteredCommesse.length === 0 && searchQuery && (
                             <p className="text-xs text-red-500 mt-1">
-                                No projects found matching filter. Clear search to see all 20C1881 projects.
+                                No projects found matching filter.
                             </p>
                         )}
                     </div>
-
-                    {/* Date and Amount Grid */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Date</label>
@@ -299,20 +285,57 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
                             />
                         </div>
                     </div>
-
-                    {/* Notes Input */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Note / se hai pagato per qualcuno</label>
+                        <label className="block text-sm font-medium text-gray-700">Note / Description</label>
                         <input
                             type="text"
                             className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm"
                             value={textInput}
                             onChange={(e) => setTextInput(e.target.value)}
-                            placeholder="e.g., Lunch with client, Restaurant 'La Buona Forchetta'"
+                            placeholder="e.g., Lunch with client..."
                         />
                     </div>
-
-                    {/* File Upload */}
+                    <div className="pt-2">
+                        <label className="flex items-center">
+                            <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                checked={isMultiPerson}
+                                onChange={(e) => setIsMultiPerson(e.target.checked)}
+                            />
+                            <span className="ml-2 text-sm text-gray-700">Did you pay for other people?</span>
+                        </label>
+                    </div>
+                    {isMultiPerson && (
+                        <div className="p-4 border rounded-md bg-gray-50">
+                            <h4 className="font-semibold text-gray-800 mb-2">Guest Names</h4>
+                            {peoplePaidFor.map((person, index) => (
+                                <div key={index} className="flex items-center mb-2">
+                                    <input
+                                        type="text"
+                                        placeholder={`Person ${index + 2}`}
+                                        value={person}
+                                        onChange={(e) => handlePersonNameChange(index, e.target.value)}
+                                        className="flex-grow p-2 border rounded-md"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => removePersonInput(index)}
+                                        className="ml-2 p-2 text-red-500 hover:bg-red-100 rounded-full"
+                                    >
+                                        <i className="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={addPersonInput}
+                                className="mt-2 w-full text-sm bg-indigo-100 text-indigo-700 py-2 rounded-md hover:bg-indigo-200"
+                            >
+                                + Add Person
+                            </button>
+                        </div>
+                    )}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Receipt Image (JPEG/PNG)</label>
                         <div
@@ -328,8 +351,6 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
                         </div>
                         <input ref={fileInputRef} id="fileInput" type="file" accept="image/*" onChange={handleFileSelect} className="sr-only" />
                     </div>
-
-                    {/* Image Preview (Optional) */}
                     {receiptEditImage && (
                         <div className="mt-2 text-center border rounded-lg p-2 bg-gray-50">
                             <p className="text-sm font-medium text-gray-600 mb-2">Image Preview:</p>
@@ -340,8 +361,6 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
                             />
                         </div>
                     )}
-
-                    {/* Save Button */}
                     <button
                         className="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center font-semibold disabled:opacity-50"
                         onClick={saveReceipt}
@@ -353,7 +372,6 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
                 </div>
             </div>
 
-            {/* --- Recent Receipts List --- */}
             <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg mt-6">
                 <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
                     <i className="fas fa-history mr-3"></i>Recent Receipts
@@ -388,7 +406,6 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
                 </div>
             </div>
 
-            {/* --- PDF Modal Preview --- */}
             {previewPdfUrl && (
                 <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-0 sm:p-4 z-50">
                     <div className="bg-white rounded-t-lg sm:rounded-lg shadow-2xl w-full h-full sm:max-w-2xl sm:h-[90vh] flex flex-col overflow-hidden">
