@@ -84,6 +84,7 @@ const MainApp = () => {
             {/* Desktop Header with Logo and Logout */}
             <header className="hidden md:block bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
                 <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+                        <p className="text-lg font-semibold">ACR Field App</p>
                     <div className="flex-shrink-0">
                         <img
                             src={logo}
@@ -111,6 +112,7 @@ const MainApp = () => {
                         alt="ACR"
                         className="h-8 w-auto max-w-[200px]"
                     />
+                    <p className="text-lg font-semibold">ACR Field App</p>
                     <button
                         onClick={handleLogout}
                         className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
