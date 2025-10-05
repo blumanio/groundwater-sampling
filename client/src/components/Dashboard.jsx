@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import Papa from 'papaparse';
+//import Papa from 'papaparse';
 
 // ============================================================================
 // UTILITY FUNCTIONS (needed for the schedule)
@@ -12,13 +12,7 @@ const getStartOfWeek = (date) => {
     return new Date(d.setDate(diff));
 };
 const getDateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-const getActivityIcon = (task) => {
-    if (!task) return ' रेस्ट';
-    const t = task.toLowerCase();
-    if (t.includes('monitoraggio')) return '🔵';
-    if (t.includes('sondaggi')) return '🟡';
-    return '📋';
-};
+
 
 // ============================================================================
 // NEW: My Week Component
@@ -27,8 +21,8 @@ const MyWeek = ({ loggedInUser, schedule }) => {
     const weeklyTasks = useMemo(() => {
         if (!loggedInUser || !schedule || !schedule.csvContent) return [];
         
-        const results = Papa.parse(schedule.csvContent, { skipEmptyLines: true });
-        const data = results.data;
+        //const results = Papa.parse(schedule.csvContent, { skipEmptyLines: true });
+        //const data = results.data;
         // This is a simplified parser; you might need to reuse your more complex one from Schedule.js
         // For this example, we assume a simpler structure or reuse your existing logic.
         // This part needs to be robust to parse your specific CSV.

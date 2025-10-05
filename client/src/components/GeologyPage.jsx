@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, LayersControl, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import SiteDashboard from './SiteDashboard';
@@ -146,7 +146,7 @@ const GeologyPage = () => {
     const [newSiteCoords, setNewSiteCoords] = useState('');
     const [newSiteAddress, setNewSiteAddress] = useState('');
 
-    const mapRef = useRef();
+    //const mapRef = useRef();
     const [userLocation, setUserLocation] = useState(null); // Default to null
     const [nearestSite, setNearestSite] = useState(null);
 

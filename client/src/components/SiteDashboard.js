@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
-import L from 'leaflet';
+import React, { useState, useEffect } from 'react';
+import { MapContainer, TileLayer , useMapEvents } from 'react-leaflet';
+//import L from 'leaflet';
 import PZMeasurementEntry from './PZMeasurementEntry'; 
 import config from '../config';
 
@@ -77,7 +77,7 @@ const SiteDashboard = ({ site, onBack }) => {
     };
 
     useEffect(() => {
-        fetchPZs();
+        //fetchPZs();
     }, [site._id]);
 
     const handlePZLocationSelect = (coordinates) => {
