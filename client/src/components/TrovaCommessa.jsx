@@ -125,7 +125,11 @@ export default function TrovaCommessa({ commesse = [] }) {
     commesse.filter(c => c.CodiceProgettoSAP && c.CodiceProgettoSAP.startsWith("20C1880")),
     [commesse]
   );
-
+  // eslint-disable-next-line
+  const rest = useMemo(() =>
+    commesse.filter(c => !c.CodiceProgettoSAP || !c.CodiceProgettoSAP.startsWith("20C1880")),
+    [commesse]
+  );
 
   // Active dataset based on toggle
   const dataset = useMemo(() => showAll ? commesse : primary, [showAll, commesse, primary]);
