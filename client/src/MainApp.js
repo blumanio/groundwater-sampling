@@ -1,7 +1,6 @@
 // MainApp.js
 import React, { useState, useEffect } from 'react';
 import Navigation from './components/Navigation';
-import Dashboard from './components/Dashboard';
 import Receipts from './components/Receipts';
 import Reports from './components/Reports';
 import Schedule from './components/Schedule';
@@ -14,7 +13,7 @@ import TrovaCommessa from './components/TrovaCommessa';
 import Strumenti from './components/Strumenti';
 import config from './config';
 import logo from './assets/LogoACR.jpg'; // Import your logo
-import { USER_DATA, getLoggedInUser } from './utils/utils';
+//import {  getLoggedInUser } from './utils/utils';
 // import RdlReportGenerator from "./components/RdlReportGenerator";
 // import RdlGenerator from "./components/RdlGenerator";
 
@@ -26,7 +25,7 @@ const MainApp = () => {
     const [receipts, setReceipts] = useState([]);
     const [commesse, setCommesse] = useState([]);
     const [schedule, setSchedule] = useState(null); // [NEW] State for schedule
-    const [loggedInUser, setLoggedInUser] = useState(null); // [NEW] State for user
+    //const [loggedInUser, setLoggedInUser] = useState(null); // [NEW] State for user
     const handleLogout = () => {
         localStorage.removeItem('token');
         window.location.reload();
@@ -58,7 +57,7 @@ const MainApp = () => {
     };
 
     useEffect(() => {
-        setLoggedInUser(getLoggedInUser()); // Get user info on load
+        //setLoggedInUser(getLoggedInUser()); // Get user info on load
         fetchApiData();
     }, []);
 
