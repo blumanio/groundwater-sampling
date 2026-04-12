@@ -1,12 +1,11 @@
 import React from 'react';
 import MainApp from './MainApp'; // Import the new MainApp component
-
+import Login from './components/Login';
 function App() {
     const token = localStorage.getItem('token');
 
-    // If there is no login token, show the Login page
-    if (token) {
-        // return <Login />;
+    if (!token) {
+        return <Login />;
     }
 
     // If a token exists, show the main application
