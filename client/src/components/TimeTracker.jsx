@@ -126,7 +126,7 @@ export default function TimeTracker({ commesse = [] }) {
     ).slice(0, 10);
   }, [siteSearch, commesse]);
 
-  const getSiteName = (activity) => {
+  const getSiteName = useCallback((activity) => {
     if (activity.siteCustom) return activity.siteCustom;
     if (activity.site) {
       const c = commesse.find((x) => x.CodiceProgettoSAP === activity.site);
@@ -137,7 +137,7 @@ export default function TimeTracker({ commesse = [] }) {
       return activity.site;
     }
     return "";
-  };
+  }, [commesse]);
 
   // ── Day total ──
   const dayTotal = dayData.activities.reduce((sum, a) => sum + calcHours(a.start, a.end, a.pausa), 0);
@@ -164,7 +164,7 @@ export default function TimeTracker({ commesse = [] }) {
       days.push({ date: key, hours, sites, descs, note: dd.note, count: dd.activities.length });
     }
     return days;
-  }, [selectedDate, data, commesse]);
+  }, [selectedDate, data, getSiteName]);
 
   const weekTotal = weekData.reduce((s, d) => s + d.hours, 0);
 
@@ -185,7 +185,7 @@ export default function TimeTracker({ commesse = [] }) {
       weeks[wk].total += hours;
     }
     return weeks;
-  }, [selectedDate, data, commesse]);
+  }, [selectedDate, data, getSiteName]);
 
   const monthTotal = Object.values(monthData).reduce((s, w) => s + w.total, 0);
 

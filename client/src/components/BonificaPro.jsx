@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useCallback, useEffect } from "react";
+import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -138,7 +138,7 @@ function parseExcelAnalyses(data, contaminants) {
     // Map columns
     const pointCol = headers.findIndex(h => h.includes("punto") || h.includes("prelievo") || h.includes("campion"));
     const dateCol = headers.findIndex(h => h.includes("data"));
-    const depthCol = headers.findIndex(h => h.includes("campionamento") && h.includes("m") || h.includes("profon") || h.includes("(m)"));
+    const depthCol = headers.findIndex(h => (h.includes("campionamento") && h.includes("m")) || h.includes("profon") || h.includes("(m)"));
 
     // Map contaminant columns
     const contMap = {};
@@ -168,11 +168,9 @@ function parseExcelAnalyses(data, contaminants) {
       const depth = depthCol >= 0 ? String(row[depthCol] || "") : "";
 
       const values = {};
-      let hasAny = false;
       Object.entries(contMap).forEach(([key, col]) => {
         const v = parseVal(row[col]);
         values[key] = v;
-        if (v !== null && v > 0) hasAny = true;
       });
 
       if (!points[name]) points[name] = { name, samples: [] };
@@ -192,10 +190,8 @@ function MapTab({ project, points, setPoints, selectedId, setSelectedId }) {
   const mapContainerRef = useRef(null);
   const [dragTarget, setDragTarget] = useState(null);
   const [hoveredPoint, setHoveredPoint] = useState(null);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const panStart = useRef(null);
+  const [zoom] = useState(1);
+  const [pan] = useState({ x: 0, y: 0 });
 
   // Unplaced points (imported but not on map yet)
   const unplacedPoints = points.filter(p => p.mapX === undefined || p.mapX === null);
@@ -213,13 +209,6 @@ function MapTab({ project, points, setPoints, selectedId, setSelectedId }) {
 
     setPoints(prev => prev.map(p => p.id === dragTarget ? { ...p, mapX: Math.max(0, Math.min(100, ax)), mapY: Math.max(0, Math.min(100, ay)) } : p));
     setDragTarget(null);
-  };
-
-  const handleMouseDown = (e) => {
-    if (e.button === 1 || e.button === 2 || (e.button === 0 && e.altKey)) {
-      setIsPanning(true);
-      panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
-    }
   };
 
   const getPointColor = (pt) => {
@@ -1082,7 +1071,6 @@ export default function BonificaProV2() {
   // Stats
   const totalSamples = points.reduce((s, p) => s + p.samples.length, 0);
   const ncCount = points.filter(p => getPointColor2(p, project) === C.red).length;
-  const useA = project.limitColumn === "A";
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: C.bg, color: C.text, fontFamily: C.font }}>

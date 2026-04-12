@@ -1,5 +1,4 @@
 import React from 'react';
-import Login from './components/Login';
 import MainApp from './MainApp'; // Import the new MainApp component
 
 function App() {

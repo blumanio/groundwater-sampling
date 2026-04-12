@@ -4,7 +4,6 @@
 import React, { useState, useEffect, useRef, useCallback,useMemo } from 'react';
 import Papa from 'papaparse';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -17,9 +16,8 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
-import { theisWellFunction, calculateDrawdownTheis, calculateDrawdownCooperJacob, calculateFitMetrics } from '../utils/hydrogeologyUtils'; // We'll create this file next
+import { calculateDrawdownTheis, calculateDrawdownCooperJacob, calculateFitMetrics } from '../utils/hydrogeologyUtils'; // We'll create this file next
 
 // Register Chart.js components
 ChartJS.register(
@@ -64,7 +62,7 @@ const MapInvalidator = () => {
 const AqtesolvPage = () => {
     // --- State ---
     const [activeTab, setActiveTab] = useState('data');
-    const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+    const [theme] = useState(localStorage.getItem('theme') || 'light');
     const [data, setData] = useState([]);
     const [fileName, setFileName] = useState('');
     const [fileSize, setFileSize] = useState('');
@@ -97,10 +95,6 @@ const AqtesolvPage = () => {
         }
         localStorage.setItem('theme', theme);
     }, [theme]);
-
-    const toggleTheme = () => {
-        setTheme(prev => prev === 'light' ? 'dark' : 'light');
-    };
 
     // --- Tab Navigation ---
     const handleTabChange = (tabName) => {
@@ -388,6 +382,7 @@ const AqtesolvPage = () => {
         if (activeTab === 'report') {
             prepareReportImages();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab]); // Trigger only when activeTab changes
 
 
