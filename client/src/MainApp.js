@@ -67,14 +67,7 @@ const MainApp = () => {
             case 'dashboard':
                 // [MODIFIED] Pass all necessary props to the Dashboard
                 return (
-                    <Dashboard
-                        receipts={receipts}
-                        commesse={commesse}
-                        schedule={schedule}
-                        loggedInUser={loggedInUser}
-                        userData={USER_DATA}
-                        setPage={setPage}
-                    />
+                    <TrovaCommessa commesse={commesse} receipts={receipts} schedule={schedule} />
                 );
             case 'receipts':
                 return <Receipts receipts={receipts} commesse={commesse} onDataChange={fetchApiData} />;
@@ -90,9 +83,9 @@ const MainApp = () => {
                 return <TimeTracker />;
             case 'bonificapro':
                 return <BonificaPro />;
-                case 'hydrogeopro':
+            case 'hydrogeopro':
                 return <HydroGeoPro />;
-                case 'trovacommessa':
+            case 'trovacommessa':
                 return <TrovaCommessa commesse={commesse} />;
             case 'strumenti':
                 return <Strumenti />;
@@ -101,7 +94,7 @@ const MainApp = () => {
             // case 'rdlgenerator':
             // return <RdlGenerator />;
             default:
-                return <Dashboard receipts={receipts} setPage={setPage} />;
+                return <TrovaCommessa commesse={commesse} />;
         }
     };
 

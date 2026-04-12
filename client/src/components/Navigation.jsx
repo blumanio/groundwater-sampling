@@ -6,19 +6,19 @@ const Navigation = ({ page, setPage }) => {
     const activeClasses = "bg-indigo-500 hover:bg-indigo-600 text-white py-3 px-4 rounded-lg text-sm font-medium shadow-md flex items-center justify-center min-h-[44px]";
 
     const navigationItems = [
-        { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-        { id: 'receipts', label: 'Scontrini', icon: '🧾' },
-        { id: 'schedule', label: 'Pianificazione', icon: '📅' },
-                { id: 'aqtesolv', label: 'Pumping Test', icon: '📊' }, // Added new item
-        { id: 'geology', label: 'Campiona', icon: '🌍' },
-        { id: 'reports', label: 'Reports', icon: '📈' },
+        { id: 'trovacommessa', label: 'Trova Commessa', icon: '🔍' }, // Added new item
+        { id: 'strumenti', label: 'Strumenti', icon: '🔧' },
         { id: 'timetracker', label: 'Time Tracker', icon: '⏱️' },
+        { id: 'geology', label: 'Campiona', icon: '🌍' },
+        // { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+        // { id: 'receipts', label: 'Scontrini', icon: '🧾' },
+        // { id: 'schedule', label: 'Pianificazione', icon: '📅' },
+                // { id: 'aqtesolv', label: 'Pumping Test', icon: '📊' }, // Added new item
+        // { id: 'reports', label: 'Reports', icon: '📈' },
         // { id: 'rdlgenerator', label: 'RDL Generator', icon: '📄' },
         // { id: 'rdlreport', label: 'RDL Report', icon: '📄' },
-            { id: 'bonificapro', label: 'Bonifica Pro', icon: '🧹' }, // Added new item
-            { id: 'hydrogeopro', label: 'HydroGeo Pro', icon: '💧' }, // Added new item
-            { id: 'trovacommessa', label: 'Trova Commessa', icon: '🔍' }, // Added new item
-        { id: 'strumenti', label: 'Strumenti', icon: '🔧' },
+            // { id: 'bonificapro', label: 'Bonifica Pro', icon: '🧹' }, // Added new item
+            // { id: 'hydrogeopro', label: 'HydroGeo Pro', icon: '💧' }, // Added new item
 
 
         

@@ -1,36 +1,29 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 
-// ── Pre-build a search index once when commesse change ──
-function buildIndex(commesse) {
-  return commesse.map((c, i) => ({
-    i,
-    hay: `${c.CodiceProgettoSAP} ${c.Descrizione}`.toLowerCase(),
-  }));
-}
-
-function search(index, commesse, raw) {
+// ── Search ──
+function search(commesse, raw) {
   const q = raw.trim().toLowerCase();
   if (!q) return commesse;
   const tokens = q.split(/\s+/);
   const hits = [];
-  for (let k = 0; k < index.length; k++) {
-    const h = index[k].hay;
-    const pos = h.indexOf(q);
+  for (let k = 0; k < commesse.length; k++) {
+    const c = commesse[k];
+    const hay = `${c.CodiceProgettoSAP} ${c.Descrizione}`.toLowerCase();
+    const pos = hay.indexOf(q);
     if (pos !== -1) {
-      hits.push({ c: commesse[index[k].i], s: pos === 0 ? 3 : 2 });
+      hits.push({ c, s: pos === 0 ? 3 : 2 });
     } else {
       let all = true;
       for (let t = 0; t < tokens.length; t++) {
-        if (h.indexOf(tokens[t]) === -1) { all = false; break; }
+        if (hay.indexOf(tokens[t]) === -1) { all = false; break; }
       }
-      if (all) hits.push({ c: commesse[index[k].i], s: 1 });
+      if (all) hits.push({ c, s: 1 });
     }
   }
   hits.sort((a, b) => b.s - a.s);
   return hits.map((h) => h.c);
 }
 
-// ── Debounce hook ──
 function useDebounce(value, ms) {
   const [d, setD] = useState(value);
   useEffect(() => {
@@ -40,9 +33,6 @@ function useDebounce(value, ms) {
   return d;
 }
 
-const PAGE_SIZE = 30;
-
-// ── Parse location from Descrizione ──
 function parseLoc(desc) {
   if (!desc) return { cliente: "—", location: "" };
   const p = desc.split("-").map((s) => s.trim());
@@ -52,12 +42,18 @@ function parseLoc(desc) {
 }
 
 function mapsUrl(loc) {
-  return loc
-    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(loc)}`
-    : null;
-}   
+  return loc ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(loc)}` : null;
+}
 
-// ── Memoized card to avoid re-renders ──
+function Hl({ text, q }) {
+  if (!q || !text) return text || "";
+  const idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) return text;
+  return <>{text.slice(0, idx)}<mark className="tc-hl">{text.slice(idx, idx + q.length)}</mark>{text.slice(idx + q.length)}</>;
+}
+
+const PAGE_SIZE = 30;
+
 const Card = React.memo(function Card({ c, query, expandedId, setExpandedId, copiedCode, onCopy }) {
   const { cliente, location } = parseLoc(c.Descrizione);
   const id = c._id || c.CodiceProgettoSAP;
@@ -109,35 +105,36 @@ const Card = React.memo(function Card({ c, query, expandedId, setExpandedId, cop
   );
 });
 
-// ── Highlight match (lightweight) ──
-function Hl({ text, q }) {
-  if (!q || !text) return text || "";
-  const idx = text.toLowerCase().indexOf(q.toLowerCase());
-  if (idx === -1) return text;
-  return <>{text.slice(0, idx)}<mark className="tc-hl">{text.slice(idx, idx + q.length)}</mark>{text.slice(idx + q.length)}</>;
-}
-
-// ── Main Component ──
+// ════════════════════════
+//  MAIN COMPONENT
+// ════════════════════════
 export default function TrovaCommessa({ commesse = [] }) {
   const [raw, setRaw] = useState("");
   const query = useDebounce(raw, 80);
   const [copiedCode, setCopiedCode] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [showAll, setShowAll] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
-
-  // Reset visible count & collapse on new search
   useEffect(() => { setVisibleCount(PAGE_SIZE); setExpandedId(null); }, [query]);
 
-  // Build index once per commesse update
-  const index = useMemo(() => buildIndex(commesse), [commesse]);
+  // Split commesse: primary (20C1880) vs rest
+  const primary = useMemo(() =>
+    commesse.filter(c => c.CodiceProgettoSAP && c.CodiceProgettoSAP.startsWith("20C1880")),
+    [commesse]
+  );
+  const rest = useMemo(() =>
+    commesse.filter(c => !c.CodiceProgettoSAP || !c.CodiceProgettoSAP.startsWith("20C1880")),
+    [commesse]
+  );
 
-  // Search using index
-  const results = useMemo(() => search(index, commesse, query), [index, commesse, query]);
+  // Active dataset based on toggle
+  const dataset = useMemo(() => showAll ? commesse : primary, [showAll, commesse, primary]);
 
-  // Only render what's visible
+  // Search
+  const results = useMemo(() => search(dataset, query), [dataset, query]);
   const visible = useMemo(() => results.slice(0, visibleCount), [results, visibleCount]);
   const hasMore = visibleCount < results.length;
 
@@ -147,9 +144,7 @@ export default function TrovaCommessa({ commesse = [] }) {
     setTimeout(() => setCopiedCode(null), 1500);
   }, []);
 
-  const handleSetExpanded = useCallback((id) => {
-    setExpandedId(id);
-  }, []);
+  const handleSetExpanded = useCallback((id) => setExpandedId(id), []);
 
   return (
     <div className="tc-root">
@@ -253,16 +248,38 @@ export default function TrovaCommessa({ commesse = [] }) {
           color: #8a847e; cursor: pointer; text-align: center;
         }
         .tc-more:active { background: #eeedea; }
+
+        /* ── Toggle ── */
+        .tc-toggle-wrap {
+          display: flex; padding: 12px 12px 0; gap: 0;
+        }
+        .tc-toggle {
+          flex: 1; padding: 10px 0; font-family: 'DM Sans', sans-serif;
+          font-size: 13px; font-weight: 600; border: 1px solid #e5e2dc;
+          cursor: pointer; text-align: center; background: #fff; color: #8a847e;
+          transition: all 0.15s;
+        }
+        .tc-toggle:first-child { border-radius: 10px 0 0 10px; }
+        .tc-toggle:last-child { border-radius: 0 10px 10px 0; border-left: none; }
+        .tc-toggle.on {
+          background: #1a1a1a; color: #fff; border-color: #1a1a1a;
+        }
+        .tc-toggle .tc-toggle-count {
+          font-family: 'JetBrains Mono', monospace; font-size: 11px;
+          opacity: 0.6; margin-left: 4px;
+        }
       `}</style>
 
+      {/* Header */}
       <div className="tc-hdr">
         <div className="tc-hdr-row">
           <h1>Trova Commessa</h1>
-          <span className="tc-hdr-badge">{commesse.length}</span>
+          <span className="tc-hdr-badge">{dataset.length}</span>
         </div>
         <p>Cerca per codice SAP o descrizione</p>
       </div>
 
+      {/* Search */}
       <div className="tc-search-wrap">
         <div className="tc-search">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#b0aaa4" strokeWidth="2.5" strokeLinecap="round" style={{ flexShrink: 0 }}>
@@ -288,14 +305,26 @@ export default function TrovaCommessa({ commesse = [] }) {
         </div>
       </div>
 
+      {/* Toggle: 20C1880 vs All */}
+      <div className="tc-toggle-wrap">
+        <button className={`tc-toggle${!showAll ? " on" : ""}`} onClick={() => setShowAll(false)}>
+          20C1880<span className="tc-toggle-count">{primary.length}</span>
+        </button>
+        <button className={`tc-toggle${showAll ? " on" : ""}`} onClick={() => setShowAll(true)}>
+          Tutte<span className="tc-toggle-count">{commesse.length}</span>
+        </button>
+      </div>
+
+      {/* Meta */}
       <div className="tc-meta">
         {query.trim()
           ? `${results.length} risultat${results.length === 1 ? "o" : "i"}`
-          : `Tutte le commesse`}
+          : showAll ? "Tutte le commesse" : "Commesse 20C1880"}
       </div>
 
+      {/* List */}
       <div className="tc-list">
-        {commesse.length === 0 ? (
+        {dataset.length === 0 ? (
           <div className="tc-empty">
             <div style={{ fontSize: 36, marginBottom: 10 }}>⏳</div>
             <p>Caricamento...</p>
@@ -304,7 +333,7 @@ export default function TrovaCommessa({ commesse = [] }) {
           <div className="tc-empty">
             <div style={{ fontSize: 36, marginBottom: 10 }}>🔍</div>
             <p>Nessuna commessa trovata</p>
-            <p className="sub">Prova con un altro termine</p>
+            <p className="sub">Prova con un altro termine{!showAll && " o carica tutte le commesse"}</p>
           </div>
         ) : (
           <>
@@ -320,11 +349,8 @@ export default function TrovaCommessa({ commesse = [] }) {
               />
             ))}
             {hasMore && (
-              <button
-                className="tc-more"
-                onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
-              >
-                Mostra altri {Math.min(PAGE_SIZE, results.length - visibleCount)} di {results.length - visibleCount} rimanenti
+              <button className="tc-more" onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}>
+                Mostra altri {Math.min(PAGE_SIZE, results.length - visibleCount)} di {results.length - visibleCount}
               </button>
             )}
           </>
