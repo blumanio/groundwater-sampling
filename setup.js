@@ -4,7 +4,7 @@ const bcrypt = require('bcrypt');
 
 // --- CONFIGURE THIS SECTION ---
 const MONGO_URI = 'mongodb+srv://medlique:HXRMVGMsPpdCjDSt@cluster0.4d0iacb.mongodb.net/acr'; // Your MongoDB connection string
-const MASTER_PASSWORD = 'AcrReggiani07'; // The password everyone will use
+const MASTER_PASSWORD = 'ACR2026ACR'; // The password everyone will use
 const APPROVED_EMAILS =
     [
         'Dante.Brogioli@acrreggiani.it',
@@ -34,7 +34,6 @@ const APPROVED_EMAILS =
         'paolo.polico@acrreggiani.it',
         'alessandro.mazzara@acrreggiani.it',
         'mohamed.elaammari@acrreggiani.it',
-        'andrea.difelice@acrreggiani.it'
 
     ];
 // -----------------------------

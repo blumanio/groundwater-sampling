@@ -151,18 +151,54 @@ app.get('/api/receipts', async (req, res) => {
 });
 
 app.post('/api/receipts', upload.single('receiptImage'), async (req, res) => {
+    console.log("Received receipt data:", req.body);
+    console.log("Received file:", req.file);
+    
     if (!req.file) return res.status(400).json({ message: 'Receipt image is required.' });
 
     const filename = `receipts/${Date.now()}-${req.file.originalname}`;
     try {
         const blob = await put(filename, req.file.buffer, { access: 'public' });
-        const newReceiptData = { ...req.body, amount: parseFloat(req.body.amount), imageData: blob.url, };
+        
+        // Parse JSON strings back to objects - with error handling
+        let commessa;
+        let peoplePaidFor = [];
+        
+        try {
+            commessa = typeof req.body.commessa === 'string' 
+                ? JSON.parse(req.body.commessa) 
+                : req.body.commessa;
+        } catch (e) {
+            return res.status(400).json({ message: 'Invalid commessa data' });
+        }
+        
+        if (req.body.peoplePaidFor) {
+            try {
+                peoplePaidFor = typeof req.body.peoplePaidFor === 'string'
+                    ? JSON.parse(req.body.peoplePaidFor)
+                    : req.body.peoplePaidFor;
+            } catch (e) {
+                console.warn('Could not parse peoplePaidFor, using empty array');
+            }
+        }
+        
+        const newReceiptData = {
+            date: req.body.date,
+            amount: parseFloat(req.body.amount),
+            text: req.body.text || '',
+            imageData: blob.url,
+            commessa: commessa,
+            peoplePaidFor: peoplePaidFor
+        };
+        
+        console.log("Creating receipt with data:", newReceiptData);
+        
         const receipt = new Receipt(newReceiptData);
         await receipt.save();
         res.status(201).json(receipt);
     } catch (error) {
         console.error("Error creating receipt:", error);
-        res.status(500).json({ message: 'Server error while saving receipt.' });
+        res.status(500).json({ message: 'Server error while saving receipt.', error: error.message });
     }
 });
 
@@ -320,6 +356,10 @@ app.post('/api/sites/:siteId/waste-logs', upload.single('wasteImage'), async (re
     }
 });
 
+
+
+//------------------------------------------------------------------------------------------------
+//--------------------------------------------------------------------------------------------------
 
 // --- Production Build & Catch-all ---
 if (process.env.NODE_ENV === 'production') {

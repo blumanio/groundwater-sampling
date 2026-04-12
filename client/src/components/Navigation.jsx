@@ -7,10 +7,21 @@ const Navigation = ({ page, setPage }) => {
 
     const navigationItems = [
         { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-        { id: 'receipts', label: 'Receipts', icon: '🧾' },
-        { id: 'schedule', label: 'Schedule', icon: '📅' },
-        { id: 'geology', label: 'Geology', icon: '🌍' },
-        { id: 'reports', label: 'Reports', icon: '📈' }
+        { id: 'receipts', label: 'Scontrini', icon: '🧾' },
+        { id: 'schedule', label: 'Pianificazione', icon: '📅' },
+                { id: 'aqtesolv', label: 'Pumping Test', icon: '📊' }, // Added new item
+        { id: 'geology', label: 'Campiona', icon: '🌍' },
+        { id: 'reports', label: 'Reports', icon: '📈' },
+        { id: 'timetracker', label: 'Time Tracker', icon: '⏱️' },
+        // { id: 'rdlgenerator', label: 'RDL Generator', icon: '📄' },
+        // { id: 'rdlreport', label: 'RDL Report', icon: '📄' },
+            { id: 'bonificapro', label: 'Bonifica Pro', icon: '🧹' }, // Added new item
+            { id: 'hydrogeopro', label: 'HydroGeo Pro', icon: '💧' }, // Added new item
+            { id: 'trovacommessa', label: 'Trova Commessa', icon: '🔍' }, // Added new item
+
+
+        
+        
     ];
 
     return (

@@ -15,13 +15,13 @@ const Reports = () => {
         const monthlyReceipts = await response.json();
 
         if (monthlyReceipts.length === 0) {
-            alert("No receipts found for the selected date range.");
+            alert("Nessuna ricevuta trovata per l'intervallo di date selezionato.");
             return;
         }
 
         const pdf = new jsPDF();
 
-        // --- PAGE 1: SUMMARY TABLE ---
+        // --- PAGINA 1: TABELLA RIEPILOGATIVA ---
         const totalReimbursableAmount = monthlyReceipts.reduce((sum, receipt) => {
             const numPeople = 1 + (receipt.peoplePaidFor?.length || 0);
             const maxReimbursement = numPeople * 13;
@@ -29,8 +29,7 @@ const Reports = () => {
             return sum + reimbursableAmount;
         }, 0);
 
-        // [MODIFIED] Added "Project Phase" column header
-        const tableColumn = ["Date", "Project Phase", "Description / Guests", "No. of People", "Amount (€)", "Reimbursable (€)"];
+        const tableColumn = ["Data", "Commessa", "Descrizione / Ospiti", "N. Persone", "Importo (€)", "Rimborsabile (€)"];
         const tableRows = [];
 
         monthlyReceipts.forEach(receipt => {
@@ -40,19 +39,18 @@ const Reports = () => {
 
             const descriptionParts = [];
             if (receipt.peoplePaidFor && receipt.peoplePaidFor.length > 0) {
-                descriptionParts.push(`Guests: ${receipt.peoplePaidFor.join(', ')}`);
+                descriptionParts.push(`Ospiti: ${receipt.peoplePaidFor.join(', ')}`);
             }
             if (receipt.text) {
                 descriptionParts.push(receipt.text);
             }
-            const descriptionText = descriptionParts.length > 0 ? descriptionParts.join('. ') : 'No notes';
+            const descriptionText = descriptionParts.length > 0 ? descriptionParts.join('. ') : 'Nessuna nota';
 
-            // [NEW] Extract the project phase from the description
             const projectPhase = (receipt.commessa?.Descrizione || '').split('-')[0].trim();
 
             const receiptData = [
-                new Date(receipt.date).toLocaleDateString(),
-                projectPhase, // Add the new data to the row
+                new Date(receipt.date).toLocaleDateString('it-IT'),
+                projectPhase,
                 descriptionText,
                 numPeople,
                 receipt.amount.toFixed(2),
@@ -62,9 +60,9 @@ const Reports = () => {
         });
 
         pdf.setFontSize(18);
-        pdf.text('Monthly Meal Report Summary', 14, 22);
+        pdf.text('spese vitto Mensile', 14, 22);
         pdf.setFontSize(11);
-        pdf.text(`Period: ${new Date(reportStartDate).toLocaleDateString()} to ${new Date(reportEndDate).toLocaleDateString()}`, 14, 30);
+        pdf.text(`Periodo: ${new Date(reportStartDate).toLocaleDateString('it-IT')} - ${new Date(reportEndDate).toLocaleDateString('it-IT')}`, 14, 30);
 
         autoTable(pdf, {
             head: [tableColumn],
@@ -76,11 +74,11 @@ const Reports = () => {
                 const tableBottomY = data.cursor.y;
                 pdf.setFontSize(12);
                 pdf.setFont('helvetica', 'bold');
-                pdf.text(`Total Reimbursable Amount: €${totalReimbursableAmount.toFixed(2)}`, data.settings.margin.left, tableBottomY + 10);
+                pdf.text(`Totale Importo Rimborsabile: €${totalReimbursableAmount.toFixed(2)}`, data.settings.margin.left, tableBottomY + 10);
             }
         });
 
-        // --- SUBSEQUENT PAGES: ONE RECEIPT PER PAGE ---
+        // --- PAGINE SUCCESSIVE: UNA RICEVUTA PER PAGINA ---
         monthlyReceipts.forEach(receipt => {
             pdf.addPage();
             let yPos = 20;
@@ -91,8 +89,8 @@ const Reports = () => {
 
             pdf.setFontSize(14);
             pdf.setFont('helvetica', 'bold');
-            pdf.text(`Date: ${new Date(receipt.date).toLocaleDateString()}`, margin, yPos);
-            pdf.text(`Amount: €${receipt.amount.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
+            pdf.text(`Data: ${new Date(receipt.date).toLocaleDateString('it-IT')}`, margin, yPos);
+            pdf.text(`Importo: €${receipt.amount.toFixed(2)}`, pageWidth - margin, yPos, { align: 'right' });
             yPos += 10;
 
             pdf.setLineWidth(0.5);
@@ -102,12 +100,12 @@ const Reports = () => {
             pdf.setFont('helvetica', 'normal');
 
             if (receipt.commessa) {
-                pdf.text(`Project: ${receipt.commessa.CodiceProgettoSAP} - ${receipt.commessa.Descrizione}`, margin, yPos);
+                pdf.text(`Commessa: ${receipt.commessa.CodiceProgettoSAP} - ${receipt.commessa.Descrizione}`, margin, yPos);
                 yPos += 7;
             }
             
             if (receipt.peoplePaidFor && receipt.peoplePaidFor.length > 0) {
-                const guestText = `Guests: ${receipt.peoplePaidFor.join(', ')}`;
+                const guestText = `Ospiti: ${receipt.peoplePaidFor.join(', ')}`;
                 const guestLines = pdf.splitTextToSize(guestText, pageContentWidth);
                 pdf.setFont('helvetica', 'bold');
                 pdf.text(guestLines, margin, yPos);
@@ -115,7 +113,7 @@ const Reports = () => {
                 yPos += (guestLines.length * 5) + 2;
             }
 
-            const notesLines = pdf.splitTextToSize(`Notes: ${receipt.text || 'No notes'}`, pageContentWidth);
+            const notesLines = pdf.splitTextToSize(`Note: ${receipt.text || 'Nessuna nota'}`, pageContentWidth);
             pdf.text(notesLines, margin, yPos);
             yPos += notesLines.length * 5 + 5;
 
@@ -142,10 +140,10 @@ const Reports = () => {
     return (
         <div className="bg-white p-6 rounded-lg shadow-md mb-6">
             <h2 className="text-lg font-semibold text-gray-800">
-                <i className="fas fa-chart-bar text-indigo-500 mr-2"></i>Generate Monthly Report
+                <i className="fas fa-chart-bar text-indigo-500 mr-2"></i>Genera Report Mensile
             </h2>
             <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700">Start Date</label>
+                <label className="block text-sm font-medium text-gray-700">Data Inizio</label>
                 <input
                     type="date"
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
@@ -154,7 +152,7 @@ const Reports = () => {
                 />
             </div>
             <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700">End Date</label>
+                <label className="block text-sm font-medium text-gray-700">Data Fine</label>
                 <input
                     type="date"
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
@@ -166,31 +164,31 @@ const Reports = () => {
                 className="w-full bg-green-500 text-white py-2 px-4 rounded-md hover:bg-green-600 transition-colors flex items-center justify-center"
                 onClick={generateReport}
             >
-                <i className="fas fa-file-pdf mr-2"></i>Generate PDF Report
+                <i className="fas fa-file-pdf mr-2"></i>Genera Report PDF
             </button>
             {previewPdfUrl && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg shadow-lg w-full max-w-4xl h-full max-h-[90vh] flex flex-col overflow-hidden">
                         <div className="p-4 flex justify-between items-center border-b border-gray-200">
-                            <h3 className="text-xl font-semibold">PDF Preview</h3>
+                            <h3 className="text-xl font-semibold">Anteprima PDF</h3>
                             <button className="text-gray-500 hover:text-gray-700" onClick={() => setPreviewPdfUrl('')}>
                                 <i className="fas fa-times text-xl"></i>
                             </button>
                         </div>
-                        <iframe src={previewPdfUrl} title="PDF Preview" className="w-full flex-grow border-0"></iframe>
+                        <iframe src={previewPdfUrl} title="Anteprima PDF" className="w-full flex-grow border-0"></iframe>
                         <div className="p-4 border-t border-gray-200 text-right">
                             <button
                                 className="bg-indigo-500 text-white py-2 px-4 rounded-md hover:bg-indigo-600 transition-colors"
                                 onClick={() => {
                                     const link = document.createElement('a');
                                     link.href = previewPdfUrl;
-                                    link.download = `monthly_report-${new Date().toISOString().split('T')[0]}.pdf`;
+                                    link.download = `report_mensile-${new Date().toISOString().split('T')[0]}.pdf`;
                                     document.body.appendChild(link);
                                     link.click();
                                     document.body.removeChild(link);
                                 }}
                             >
-                                <i className="fas fa-download mr-2"></i>Download PDF
+                                <i className="fas fa-download mr-2"></i>Scarica PDF
                             </button>
                         </div>
                     </div>

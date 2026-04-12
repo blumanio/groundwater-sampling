@@ -33,7 +33,7 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
 
     // --- Filtered Commesse Logic ---
     const baseFilteredCommesse = commesse.filter(c =>
-        c.CodiceProgettoSAP && (c.CodiceProgettoSAP.startsWith('20C1881') )
+        c.CodiceProgettoSAP && (c.CodiceProgettoSAP.startsWith('20C1880') )
     );
     const finalFilteredCommesse = baseFilteredCommesse.filter(c => {
         const searchString = `${c.CodiceProgettoSAP} ${c.Descrizione}`.toLowerCase();
@@ -95,46 +95,57 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
     };
 
     // --- Data Handling Functions ---
-    const saveReceipt = async () => {
-        if (!receiptEditImage || !receiptAmount || !selectedCommessa) {
-            setError('Please fill out all mandatory fields and upload a receipt image.');
-            return;
-        }
+const saveReceipt = async () => {
+    if (!receiptEditImage || !receiptAmount || !selectedCommessa) {
+        setError('Please fill out all mandatory fields and upload a receipt image.');
+        return;
+    }
 
+    setError(null);
+    setIsLoading(true);
+
+    try {
+        // Convert canvas to blob instead of base64
         const tempCanvas = document.createElement('canvas');
         const ctx = tempCanvas.getContext('2d');
         tempCanvas.width = receiptEditImage.width;
         tempCanvas.height = receiptEditImage.height;
         ctx.drawImage(receiptEditImage, 0, 0);
-        const imageData = tempCanvas.toDataURL('image/jpeg', 0.9);
+        
+        // Convert to blob
+        const blob = await new Promise(resolve => {
+            tempCanvas.toBlob(resolve, 'image/jpeg', 0.9);
+        });
 
-        setError(null);
-        setIsLoading(true);
-
-        const newReceipt = {
-            date: receiptDate,
-            amount: parseFloat(receiptAmount),
-            text: textInput,
-            imageData: imageData,
-            commessa: selectedCommessa,
-            peoplePaidFor: isMultiPerson ? peoplePaidFor.filter(name => name.trim() !== '') : [],
-        };
-
-        try {
-            const response = await fetch(`${API_URL}/receipts`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newReceipt),
-            });
-            if (!response.ok) throw new Error('Failed to save the receipt.');
-            resetForm();
-            await onDataChange();
-        } catch (error) {
-            setError(error.message);
-        } finally {
-            setIsLoading(false);
+        // Create FormData and append all fields
+        const formData = new FormData();
+        formData.append('receiptImage', blob, 'receipt.jpg'); // ✅ This matches upload.single('receiptImage')
+        formData.append('date', receiptDate);
+        formData.append('amount', receiptAmount);
+        formData.append('text', textInput);
+        formData.append('commessa', JSON.stringify(selectedCommessa));
+        
+        if (isMultiPerson) {
+            const filteredPeople = peoplePaidFor.filter(name => name.trim() !== '');
+            formData.append('peoplePaidFor', JSON.stringify(filteredPeople));
         }
-    };
+
+        const response = await fetch(`${API_URL}/receipts`, {
+            method: 'POST',
+            // ❌ Don't set Content-Type header - let browser set it with boundary
+            body: formData,
+        });
+        
+        if (!response.ok) throw new Error('Failed to save the receipt.');
+        
+        resetForm();
+        await onDataChange();
+    } catch (error) {
+        setError(error.message);
+    } finally {
+        setIsLoading(false);
+    }
+};
 
     const deleteReceipt = async (id) => {
         if (window.confirm('Are you sure you want to delete this receipt?')) {
@@ -166,9 +177,9 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
         pdf.text(`Commessa: ${receipt.commessa.Descrizione.split('-')[0]} - ${receipt.commessa.Descrizione.split('-')[2] || 'N/A'}`, margin, yPos);
         yPos += textHeight;
         
-        pdf.text(`Date: ${formatDate(receipt.date)}`, margin, yPos);
+        pdf.text(`Data: ${formatDate(receipt.date)}`, margin, yPos);
         yPos += textHeight;
-        pdf.text(`Amount: €${receipt.amount.toFixed(2)}`, margin, yPos);
+        pdf.text(`Importo: €${receipt.amount.toFixed(2)}`, margin, yPos);
         yPos += textHeight;
 
         // --- [NEW] Add guest names if they exist ---
@@ -263,7 +274,7 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Date</label>
+                            <label className="block text-sm font-medium text-gray-700">Data</label>
                             <input
                                 type="date"
                                 className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm"
@@ -286,7 +297,7 @@ const Receipts = ({ receipts = [], commesse = [], onDataChange }) => {
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">Note / Description</label>
+                        <label className="block text-sm font-medium text-gray-700">Note</label>
                         <input
                             type="text"
                             className="mt-1 block w-full rounded-lg border-gray-300 shadow-sm"

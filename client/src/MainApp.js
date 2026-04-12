@@ -5,10 +5,19 @@ import Dashboard from './components/Dashboard';
 import Receipts from './components/Receipts';
 import Reports from './components/Reports';
 import Schedule from './components/Schedule';
+import AqtesolvPage from './components/AqtesolvPage'; // Import the new component
 import GeologyPage from './components/GeologyPage';
+import TimeTracker from './components/TimeTracker';
+import BonificaPro from './components/BonificaPro';
+import HydroGeoPro from './components/HydroGeoPro';
+import TrovaCommessa from './components/TrovaCommessa';
 import config from './config';
 import logo from './assets/LogoACR.jpg'; // Import your logo
 import { USER_DATA, getLoggedInUser } from './utils/utils';
+// import RdlReportGenerator from "./components/RdlReportGenerator";
+// import RdlGenerator from "./components/RdlGenerator";
+
+
 const API_URL = config.API_URL;
 
 const MainApp = () => {
@@ -72,8 +81,22 @@ const MainApp = () => {
                 return <Schedule schedule={schedule} />;
             case 'geology':
                 return <GeologyPage />;
+            case 'aqtesolv': // Add case for the new page
+                return <AqtesolvPage />;
             case 'reports':
-                return <Reports receipts={receipts}  />;
+                return <Reports receipts={receipts} />;
+            case 'timetracker':
+                return <TimeTracker />;
+            case 'bonificapro':
+                return <BonificaPro />;
+                case 'hydrogeopro':
+                return <HydroGeoPro />;
+                case 'trovacommessa':
+                return <TrovaCommessa commesse={commesse} />;
+            // case 'rdlreport':
+            // return <RdlReportGenerator />;
+            // case 'rdlgenerator':
+            // return <RdlGenerator />;
             default:
                 return <Dashboard receipts={receipts} setPage={setPage} />;
         }
@@ -84,7 +107,7 @@ const MainApp = () => {
             {/* Desktop Header with Logo and Logout */}
             <header className="hidden md:block bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
                 <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-                        <p className="text-lg font-semibold">ACR Field App</p>
+                    <p className="text-lg font-semibold">Groundwater Field App</p>
                     <div className="flex-shrink-0">
                         <img
                             src={logo}
@@ -107,12 +130,12 @@ const MainApp = () => {
             {/* Mobile Header with Logo */}
             <header className="md:hidden bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
                 <div className="px-4 py-3 flex items-center justify-between">
-                    <img
+                    {/* <img
                         src={logo}
                         alt="ACR"
                         className="h-8 w-auto max-w-[200px]"
-                    />
-                    <p className="text-lg font-semibold">ACR Field App</p>
+                    /> */}
+                    <p className="text-lg font-semibold">Groundwater Field  App</p>
                     <button
                         onClick={handleLogout}
                         className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
