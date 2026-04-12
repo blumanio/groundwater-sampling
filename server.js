@@ -98,6 +98,26 @@ const SamplingEventSchema = new mongoose.Schema({
     notes: String
 });
 
+const EquipmentSchema = new mongoose.Schema({
+    name:         { type: String, required: true },
+    category:     { type: String, enum: ['Pompa', 'Generatore', 'Campionatore', 'Multiparametro', 'GPS', 'Altro'], default: 'Altro' },
+    serialNumber: { type: String },
+    notes:        { type: String },
+    status:       { type: String, enum: ['disponibile', 'in uso', 'manutenzione', 'fuori servizio'], default: 'disponibile' },
+    createdAt:    { type: Date, default: Date.now },
+});
+
+const EquipmentBookingSchema = new mongoose.Schema({
+    equipmentId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment', required: true },
+    technicianName: { type: String, required: true },
+    date:           { type: String, required: true }, // "YYYY-MM-DD"
+    site:           { type: String, required: true },
+    notes:          { type: String },
+    createdBy:      { type: String },
+    createdAt:      { type: Date, default: Date.now },
+});
+EquipmentBookingSchema.index({ equipmentId: 1, date: 1 });
+
 // ============================================================================
 // 2. MODELS (Serverless-Safe)
 // ============================================================================
@@ -111,6 +131,8 @@ const WasteLog = mongoose.models.WasteLog || mongoose.model('WasteLog', WasteLog
 const Site = mongoose.models.Site || mongoose.model('Site', SiteSchema);
 const Piezometer = mongoose.models.Piezometer || mongoose.model('Piezometer', PiezometerSchema);
 const SamplingEvent = mongoose.models.SamplingEvent || mongoose.model('SamplingEvent', SamplingEventSchema);
+const Equipment = mongoose.models.Equipment || mongoose.model('Equipment', EquipmentSchema);
+const EquipmentBooking = mongoose.models.EquipmentBooking || mongoose.model('EquipmentBooking', EquipmentBookingSchema);
 
 
 // ============================================================================
@@ -357,6 +379,93 @@ app.post('/api/sites/:siteId/waste-logs', upload.single('wasteImage'), async (re
 });
 
 
+
+// --- Equipment Routes ---
+// NOTE: /bookings routes must be registered before /:id to avoid Express matching "bookings" as an id.
+
+app.get('/api/equipment', async (req, res) => {
+    try {
+        const items = await Equipment.find({}).sort({ name: 1 });
+        res.json(items);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching equipment', error: error.message });
+    }
+});
+
+app.post('/api/equipment', async (req, res) => {
+    try {
+        const item = new Equipment(req.body);
+        await item.save();
+        res.status(201).json(item);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating equipment', error: error.message });
+    }
+});
+
+app.get('/api/equipment/bookings', async (req, res) => {
+    try {
+        const { date, from, to, technicianName } = req.query;
+        const query = {};
+        if (date) {
+            query.date = date;
+        } else if (from && to) {
+            query.date = { $gte: from, $lte: to };
+        }
+        if (technicianName) query.technicianName = technicianName;
+        const bookings = await EquipmentBooking.find(query).populate('equipmentId').sort({ date: 1 });
+        res.json(bookings);
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching bookings', error: error.message });
+    }
+});
+
+app.post('/api/equipment/bookings', async (req, res) => {
+    try {
+        const { equipmentId, date } = req.body;
+        const existing = await EquipmentBooking.findOne({ equipmentId, date });
+        if (existing) {
+            return res.status(409).json({
+                conflict: true,
+                message: `Già prenotato da ${existing.technicianName} presso ${existing.site}`,
+                booking: existing,
+            });
+        }
+        const booking = new EquipmentBooking(req.body);
+        await booking.save();
+        res.status(201).json(booking);
+    } catch (error) {
+        res.status(400).json({ message: 'Error creating booking', error: error.message });
+    }
+});
+
+app.delete('/api/equipment/bookings/:id', async (req, res) => {
+    try {
+        await EquipmentBooking.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Booking deleted' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error deleting booking', error: error.message });
+    }
+});
+
+app.put('/api/equipment/:id', async (req, res) => {
+    try {
+        const item = await Equipment.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!item) return res.status(404).json({ message: 'Equipment not found' });
+        res.json(item);
+    } catch (error) {
+        res.status(400).json({ message: 'Error updating equipment', error: error.message });
+    }
+});
+
+app.delete('/api/equipment/:id', async (req, res) => {
+    try {
+        await Equipment.findByIdAndDelete(req.params.id);
+        await EquipmentBooking.deleteMany({ equipmentId: req.params.id });
+        res.json({ message: 'Equipment and related bookings deleted' });
+    } catch (error) {
+        res.status(500).json({ message: 'Error deleting equipment', error: error.message });
+    }
+});
 
 //------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------

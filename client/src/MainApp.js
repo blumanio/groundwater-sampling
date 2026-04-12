@@ -11,6 +11,7 @@ import TimeTracker from './components/TimeTracker';
 import BonificaPro from './components/BonificaPro';
 import HydroGeoPro from './components/HydroGeoPro';
 import TrovaCommessa from './components/TrovaCommessa';
+import Strumenti from './components/Strumenti';
 import config from './config';
 import logo from './assets/LogoACR.jpg'; // Import your logo
 import { USER_DATA, getLoggedInUser } from './utils/utils';
@@ -93,6 +94,8 @@ const MainApp = () => {
                 return <HydroGeoPro />;
                 case 'trovacommessa':
                 return <TrovaCommessa commesse={commesse} />;
+            case 'strumenti':
+                return <Strumenti />;
             // case 'rdlreport':
             // return <RdlReportGenerator />;
             // case 'rdlgenerator':

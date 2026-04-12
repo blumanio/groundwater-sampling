@@ -18,6 +18,7 @@ const Navigation = ({ page, setPage }) => {
             { id: 'bonificapro', label: 'Bonifica Pro', icon: '🧹' }, // Added new item
             { id: 'hydrogeopro', label: 'HydroGeo Pro', icon: '💧' }, // Added new item
             { id: 'trovacommessa', label: 'Trova Commessa', icon: '🔍' }, // Added new item
+        { id: 'strumenti', label: 'Strumenti', icon: '🔧' },
 
 
         
