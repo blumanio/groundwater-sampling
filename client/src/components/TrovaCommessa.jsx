@@ -119,20 +119,22 @@ export default function TrovaCommessa({ commesse = [] }) {
 
   useEffect(() => { inputRef.current?.focus(); }, []);
   useEffect(() => { setVisibleCount(PAGE_SIZE); setExpandedId(null); }, [query]);
+ // Guard against non-array data from failed API
+    const safeCommesse = useMemo(() => Array.isArray(commesse) ? commesse : [], [commesse]);
 
   // Split commesse: primary (20C1880) vs rest
   const primary = useMemo(() =>
-    commesse.filter(c => c.CodiceProgettoSAP && c.CodiceProgettoSAP.startsWith("20C1880")),
-    [commesse]
+    safeCommesse.filter(c => c.CodiceProgettoSAP && c.CodiceProgettoSAP.startsWith("20C1880")),
+    [safeCommesse]
   );
   // eslint-disable-next-line
   const rest = useMemo(() =>
-    commesse.filter(c => !c.CodiceProgettoSAP || !c.CodiceProgettoSAP.startsWith("20C1880")),
-    [commesse]
+    safeCommesse.filter(c => !c.CodiceProgettoSAP || !c.CodiceProgettoSAP.startsWith("20C1880")),
+    [safeCommesse]
   );
 
   // Active dataset based on toggle
-  const dataset = useMemo(() => showAll ? commesse : primary, [showAll, commesse, primary]);
+  const dataset = useMemo(() => showAll ? safeCommesse : primary, [showAll, safeCommesse, primary]);
 
   // Search
   const results = useMemo(() => search(dataset, query), [dataset, query]);
@@ -312,7 +314,7 @@ export default function TrovaCommessa({ commesse = [] }) {
           20C1880<span className="tc-toggle-count">{primary.length}</span>
         </button>
         <button className={`tc-toggle${showAll ? " on" : ""}`} onClick={() => setShowAll(true)}>
-          Tutte<span className="tc-toggle-count">{commesse.length}</span>
+          Tutte<span className="tc-toggle-count">{safeCommesse.length}</span>
         </button>
       </div>
 
