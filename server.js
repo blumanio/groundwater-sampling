@@ -38,8 +38,12 @@ const ScheduleDataSchema = new mongoose.Schema({
     uploadedAt: { type: Date, default: Date.now },
 });
 
-const userSchema = new mongoose.Schema({
-    email: { type: String, required: true, unique: true, lowercase: true }
+// models/User.js
+const UserSchema = new mongoose.Schema({
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    fullName: { type: String, default: '' },
+    role: { type: String, enum: ['admin', 'magazziniere', 'tecnico'], default: 'tecnico' },
 });
 
 const settingSchema = new mongoose.Schema({
@@ -50,7 +54,9 @@ const settingSchema = new mongoose.Schema({
 const commessaSchema = new mongoose.Schema({
     CodiceProgettoSAP: { type: String, required: true },
     Descrizione: { type: String, required: true },
-});
+}, { collection: 'commesse' }); // ← forza il nome esatto
+
+
 
 const receiptSchema = new mongoose.Schema({
     date: { type: Date, required: true },
@@ -98,23 +104,45 @@ const SamplingEventSchema = new mongoose.Schema({
     notes: String
 });
 
+// Aggiungi questi campi allo schema Equipment esistente:
 const EquipmentSchema = new mongoose.Schema({
-    name:         { type: String, required: true },
-    category:     { type: String, enum: ['Pompa', 'Generatore', 'Campionatore', 'Multiparametro', 'GPS', 'Altro'], default: 'Altro' },
+    name: { type: String, required: true },
+    category: { type: String, enum: ['Pompa', 'Generatore', 'Campionatore', 'Multiparametro', 'GPS', 'Altro'], default: 'Altro' },
     serialNumber: { type: String },
-    notes:        { type: String },
-    status:       { type: String, enum: ['disponibile', 'in uso', 'manutenzione', 'fuori servizio'], default: 'disponibile' },
-    createdAt:    { type: Date, default: Date.now },
+    notes: { type: String },
+    // ❌ vecchio enum — cambia 'disponibile' con 'in magazzino'
+    status: {
+        type: String,
+        enum: ['in magazzino', 'in uso', 'manutenzione', 'fuori servizio'],
+        default: 'in magazzino'
+    },
+    // ✅ NUOVI
+    assignedTo: { type: String, default: null },
+    assignedAt: { type: Date, default: null },
+    assignedSite: { type: String, default: null },
+    createdAt: { type: Date, default: Date.now },
 });
 
+
+const EventLogSchema = new mongoose.Schema({
+    equipmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment', required: true },
+    equipmentName: { type: String, required: true },
+    eventType: { type: String, enum: ['prelievo', 'riconsegna', 'modifica', 'manutenzione'], required: true },
+    createdBy: { type: String },
+    site: { type: String },
+    notes: { type: String },
+    condition: { type: String },
+}, { timestamps: true });
+
+
 const EquipmentBookingSchema = new mongoose.Schema({
-    equipmentId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment', required: true },
+    equipmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment', required: true },
     technicianName: { type: String, required: true },
-    date:           { type: String, required: true }, // "YYYY-MM-DD"
-    site:           { type: String, required: true },
-    notes:          { type: String },
-    createdBy:      { type: String },
-    createdAt:      { type: Date, default: Date.now },
+    date: { type: String, required: true }, // "YYYY-MM-DD"
+    site: { type: String, required: true },
+    notes: { type: String },
+    createdBy: { type: String },
+    createdAt: { type: Date, default: Date.now },
 });
 EquipmentBookingSchema.index({ equipmentId: 1, date: 1 });
 
@@ -123,9 +151,9 @@ EquipmentBookingSchema.index({ equipmentId: 1, date: 1 });
 // ============================================================================
 // This pattern checks if a model exists before compiling it, preventing errors in serverless environments.
 const ScheduleData = mongoose.models.ScheduleData || mongoose.model('ScheduleData', ScheduleDataSchema);
-const User = mongoose.models.User || mongoose.model('User', userSchema);
+const User = mongoose.models.User || mongoose.model('User', UserSchema);
 const Setting = mongoose.models.Setting || mongoose.model('Setting', settingSchema);
-const Commessa = mongoose.models.Commesse || mongoose.model('Commesse', commessaSchema);
+const Commessa = mongoose.models.Commessa || mongoose.model('Commessa', commessaSchema);
 const Receipt = mongoose.models.Receipt || mongoose.model('Receipt', receiptSchema);
 const WasteLog = mongoose.models.WasteLog || mongoose.model('WasteLog', WasteLogSchema);
 const Site = mongoose.models.Site || mongoose.model('Site', SiteSchema);
@@ -133,6 +161,7 @@ const Piezometer = mongoose.models.Piezometer || mongoose.model('Piezometer', Pi
 const SamplingEvent = mongoose.models.SamplingEvent || mongoose.model('SamplingEvent', SamplingEventSchema);
 const Equipment = mongoose.models.Equipment || mongoose.model('Equipment', EquipmentSchema);
 const EquipmentBooking = mongoose.models.EquipmentBooking || mongoose.model('EquipmentBooking', EquipmentBookingSchema);
+const EventLog = mongoose.models.EventLog || mongoose.model('EventLog', EventLogSchema);
 
 
 // ============================================================================
@@ -144,7 +173,7 @@ app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         if (!email || !password) return res.status(400).json({ message: "Email and password are required." });
-        
+
         const approvedUser = await User.findOne({ email: email.toLowerCase() });
         if (!approvedUser) return res.status(401).json({ message: "Email address not authorized." });
 
@@ -154,7 +183,17 @@ app.post('/api/login', async (req, res) => {
         const isMatch = await bcrypt.compare(password, masterPasswordSetting.value);
         if (!isMatch) return res.status(401).json({ message: "Incorrect password." });
 
-        const token = jwt.sign({ email: approvedUser.email }, process.env.JWT_SECRET, { expiresIn: '1d' });
+        const token = jwt.sign(
+            {
+                id: approvedUser._id,
+                email: approvedUser.email,
+                fullName: approvedUser.fullName,
+                role: approvedUser.role,
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+
+        );
         res.json({ message: "Login successful!", token });
     } catch (error) {
         console.error("Login error:", error);
@@ -175,25 +214,25 @@ app.get('/api/receipts', async (req, res) => {
 app.post('/api/receipts', upload.single('receiptImage'), async (req, res) => {
     console.log("Received receipt data:", req.body);
     console.log("Received file:", req.file);
-    
+
     if (!req.file) return res.status(400).json({ message: 'Receipt image is required.' });
 
     const filename = `receipts/${Date.now()}-${req.file.originalname}`;
     try {
         const blob = await put(filename, req.file.buffer, { access: 'public' });
-        
+
         // Parse JSON strings back to objects - with error handling
         let commessa;
         let peoplePaidFor = [];
-        
+
         try {
-            commessa = typeof req.body.commessa === 'string' 
-                ? JSON.parse(req.body.commessa) 
+            commessa = typeof req.body.commessa === 'string'
+                ? JSON.parse(req.body.commessa)
                 : req.body.commessa;
         } catch (e) {
             return res.status(400).json({ message: 'Invalid commessa data' });
         }
-        
+
         if (req.body.peoplePaidFor) {
             try {
                 peoplePaidFor = typeof req.body.peoplePaidFor === 'string'
@@ -203,7 +242,7 @@ app.post('/api/receipts', upload.single('receiptImage'), async (req, res) => {
                 console.warn('Could not parse peoplePaidFor, using empty array');
             }
         }
-        
+
         const newReceiptData = {
             date: req.body.date,
             amount: parseFloat(req.body.amount),
@@ -212,9 +251,9 @@ app.post('/api/receipts', upload.single('receiptImage'), async (req, res) => {
             commessa: commessa,
             peoplePaidFor: peoplePaidFor
         };
-        
+
         console.log("Creating receipt with data:", newReceiptData);
-        
+
         const receipt = new Receipt(newReceiptData);
         await receipt.save();
         res.status(201).json(receipt);
@@ -276,19 +315,21 @@ app.post('/api/schedule/upload', upload.single('scheduleFile'), async (req, res)
 app.get('/api/sites/summary', async (req, res) => {
     try {
         const sites = await Site.aggregate([
-            { $lookup: { from: 'piezometers', localField: '_id', foreignField: 'siteId', as: 'piezometers' }},
-            { $unwind: { path: '$piezometers', preserveNullAndEmptyArrays: true }},
-            { $lookup: { from: 'samplingevents', localField: 'piezometers._id', foreignField: 'piezometerId', as: 'events' }},
-            { $addFields: { hasSampled: { $gt: [{ $size: '$events' }, 0] }}},
-            { $group: {
-                _id: '$_id',
-                name: { $first: '$name' },
-                client: { $first: '$client' },
-                address: { $first: '$address' },
-                coordinates: { $first: '$coordinates' },
-                totalPZs: { $sum: { $cond: ['$piezometers', 1, 0] } },
-                completedPZs: { $sum: { $cond: ['$hasSampled', 1, 0] } }
-            }}
+            { $lookup: { from: 'piezometers', localField: '_id', foreignField: 'siteId', as: 'piezometers' } },
+            { $unwind: { path: '$piezometers', preserveNullAndEmptyArrays: true } },
+            { $lookup: { from: 'samplingevents', localField: 'piezometers._id', foreignField: 'piezometerId', as: 'events' } },
+            { $addFields: { hasSampled: { $gt: [{ $size: '$events' }, 0] } } },
+            {
+                $group: {
+                    _id: '$_id',
+                    name: { $first: '$name' },
+                    client: { $first: '$client' },
+                    address: { $first: '$address' },
+                    coordinates: { $first: '$coordinates' },
+                    totalPZs: { $sum: { $cond: ['$piezometers', 1, 0] } },
+                    completedPZs: { $sum: { $cond: ['$hasSampled', 1, 0] } }
+                }
+            }
         ]);
         res.json(sites);
     } catch (error) {
@@ -466,7 +507,92 @@ app.delete('/api/equipment/:id', async (req, res) => {
         res.status(500).json({ message: 'Error deleting equipment', error: error.message });
     }
 });
+// ── GET /equipment/events ─────────────────────────────────────
+app.get('/api/equipment/events', async (req, res) => {
+    try {
+        const { equipmentId, createdBy, from, to } = req.query;
+        const filter = {};
+        if (equipmentId) filter.equipmentId = equipmentId;
+        if (createdBy) filter.createdBy = createdBy;
+        if (from || to) {
+            filter.createdAt = {};
+            if (from) filter.createdAt.$gte = new Date(from);
+            if (to) filter.createdAt.$lte = new Date(to);
+        }
+        const events = await EventLog.find(filter)
+            .sort({ createdAt: -1 })
+            .limit(200);
+        res.json(events);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
 
+// ── POST /equipment/:id/assign ────────────────────────────────
+app.post('/api/equipment/:id/assign', async (req, res) => {
+    try {
+        const { assignedTo, assignedAt, site, notes, status, createdBy } = req.body;
+
+        const equipment = await Equipment.findById(req.params.id);
+        if (!equipment) return res.status(404).json({ message: 'Strumento non trovato' });
+
+        if (equipment.status === 'in uso') {
+            return res.status(409).json({
+                message: `Già in uso da ${equipment.assignedTo} (${equipment.assignedSite || 'sito non specificato'})`
+            });
+        }
+
+        equipment.status = 'in uso';
+        equipment.assignedTo = assignedTo;
+        equipment.assignedAt = assignedAt || new Date();
+        equipment.assignedSite = site;
+        await equipment.save();
+
+        await EventLog.create({
+            equipmentId: equipment._id,
+            equipmentName: equipment.name,
+            eventType: 'prelievo',
+            createdBy,
+            site,
+            notes,
+            condition: 'ok',
+        });
+
+        res.json(equipment);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ── POST /equipment/:id/return ────────────────────────────────
+app.post('/api/equipment/:id/return', async (req, res) => {
+    try {
+        const { notes, condition, status, createdBy } = req.body;
+
+        const equipment = await Equipment.findById(req.params.id);
+        if (!equipment) return res.status(404).json({ message: 'Strumento non trovato' });
+
+        await EventLog.create({
+            equipmentId: equipment._id,
+            equipmentName: equipment.name,
+            eventType: 'riconsegna',
+            createdBy: createdBy || equipment.assignedTo,
+            site: equipment.assignedSite,
+            notes,
+            condition,
+        });
+
+        equipment.status = status || 'in magazzino';
+        equipment.assignedTo = null;
+        equipment.assignedAt = null;
+        equipment.assignedSite = null;
+        await equipment.save();
+
+        res.json(equipment);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
 //------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------
 

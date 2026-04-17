@@ -1,22 +1,19 @@
-// MainApp.js
+// src/MainApp.js
 import React, { useState, useEffect } from 'react';
 import Navigation from './components/Navigation';
 import Receipts from './components/Receipts';
 import Reports from './components/Reports';
 import Schedule from './components/Schedule';
-import AqtesolvPage from './components/AqtesolvPage'; // Import the new component
+import AqtesolvPage from './components/AqtesolvPage';
 import GeologyPage from './components/GeologyPage';
 import TimeTracker from './components/TimeTracker';
 import BonificaPro from './components/BonificaPro';
 import HydroGeoPro from './components/HydroGeoPro';
 import TrovaCommessa from './components/TrovaCommessa';
-import Strumenti from './components/Strumenti';
+import Magazzino from './components/Magazzino';
+import Login from './components/Login';
 import config from './config';
-import logo from './assets/LogoACR.jpg'; // Import your logo
-//import {  getLoggedInUser } from './utils/utils';
-// import RdlReportGenerator from "./components/RdlReportGenerator";
-// import RdlGenerator from "./components/RdlGenerator";
-
+import logo from './assets/LogoACR.jpg';
 
 const API_URL = config.API_URL;
 
@@ -24,15 +21,24 @@ const MainApp = () => {
     const [page, setPage] = useState('dashboard');
     const [receipts, setReceipts] = useState([]);
     const [commesse, setCommesse] = useState([]);
-    const [schedule, setSchedule] = useState(null); // [NEW] State for schedule
-    //const [loggedInUser, setLoggedInUser] = useState(null); // [NEW] State for user
+    const [schedule, setSchedule] = useState(null);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+    // Check token on mount
+    useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            setIsLoggedIn(true);
+        }
+    }, []);
+
     const handleLogout = () => {
         localStorage.removeItem('token');
-        window.location.reload();
+        setIsLoggedIn(false);
     };
+
     const fetchApiData = async () => {
         try {
-            // [MODIFIED] Fetch all data including the latest schedule
             const [receiptsRes, commesseRes, scheduleRes] = await Promise.all([
                 fetch(`${API_URL}/receipts`),
                 fetch(`${API_URL}/commesse`),
@@ -45,36 +51,30 @@ const MainApp = () => {
             setReceipts(receiptsData);
             setCommesse(commesseData);
 
-            // [NEW] Process and set the most recent schedule
             if (scheduleData && scheduleData.length > 0) {
                 const mostRecent = scheduleData.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt))[0];
                 setSchedule(mostRecent);
             }
-
         } catch (error) {
             console.error('Error fetching data:', error);
         }
     };
 
     useEffect(() => {
-        //setLoggedInUser(getLoggedInUser()); // Get user info on load
-        fetchApiData();
-    }, []);
+        if (isLoggedIn) fetchApiData();
+    }, [isLoggedIn]);
 
     const renderPage = () => {
         switch (page) {
             case 'dashboard':
-                // [MODIFIED] Pass all necessary props to the Dashboard
-                return (
-                    <TrovaCommessa commesse={commesse} receipts={receipts} schedule={schedule} />
-                );
+                return <TrovaCommessa commesse={commesse} receipts={receipts} schedule={schedule} />;
             case 'receipts':
                 return <Receipts receipts={receipts} commesse={commesse} onDataChange={fetchApiData} />;
             case 'schedule':
                 return <Schedule schedule={schedule} />;
             case 'geology':
                 return <GeologyPage />;
-            case 'aqtesolv': // Add case for the new page
+            case 'aqtesolv':
                 return <AqtesolvPage />;
             case 'reports':
                 return <Reports receipts={receipts} />;
@@ -86,20 +86,23 @@ const MainApp = () => {
                 return <HydroGeoPro />;
             case 'trovacommessa':
                 return <TrovaCommessa commesse={commesse} />;
-            case 'strumenti':
-                return <Strumenti />;
-            // case 'rdlreport':
-            // return <RdlReportGenerator />;
-            // case 'rdlgenerator':
-            // return <RdlGenerator />;
+            case 'magazzino':
+                return <Magazzino />;
             default:
                 return <TrovaCommessa commesse={commesse} />;
         }
     };
 
+    // ── Not logged in — show login screen ──
+    if (!isLoggedIn) {
+        return <Login onLoginSuccess={() => setIsLoggedIn(true)} />;
+    }
+
+    // ── Logged in — show app ──
     return (
         <div className="min-h-screen bg-gray-50">
-            {/* Desktop Header with Logo and Logout */}
+
+            {/* Desktop Header */}
             <header className="hidden md:block bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
                 <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
                     <p className="text-lg font-semibold">Per Tecnici ACR</p>
@@ -122,15 +125,10 @@ const MainApp = () => {
                 </div>
             </header>
 
-            {/* Mobile Header with Logo */}
+            {/* Mobile Header */}
             <header className="md:hidden bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
                 <div className="px-4 py-3 flex items-center justify-between">
-                    {/* <img
-                        src={logo}
-                        alt="ACR"
-                        className="h-8 w-auto max-w-[200px]"
-                    /> */}
-                    <p className="text-lg font-semibold">Groundwater Field  App</p>
+                    <p className="text-lg font-semibold">Groundwater Field App</p>
                     <button
                         onClick={handleLogout}
                         className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"

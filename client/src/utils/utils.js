@@ -35,7 +35,13 @@ export const getLoggedInUser = () => {
         const token = localStorage.getItem('token');
         if (!token) return null;
         const payload = JSON.parse(atob(token.split('.')[1]));
-        return USER_DATA.find(u => u.email.toLowerCase() === payload.email.toLowerCase()) || null;
+        
+        return {
+            id:       payload.id || payload._id || payload.sub,
+            email:    payload.email,
+            fullName: payload.fullName || payload.name || payload.email,
+            role:     payload.role || 'tecnico',
+        };
     } catch (e) {
         console.error("Failed to decode token:", e);
         return null;

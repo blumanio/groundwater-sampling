@@ -57,6 +57,7 @@ const PAGE_SIZE = 30;
 const Card = React.memo(function Card({ c, query, expandedId, setExpandedId, copiedCode, onCopy }) {
   const { cliente, location } = parseLoc(c.Descrizione);
   const id = c._id || c.CodiceProgettoSAP;
+  console.log('dddddddddddd', c)
   const isOpen = expandedId === id;
   const maps = mapsUrl(location);
   const isCopied = copiedCode === c.CodiceProgettoSAP;
@@ -65,15 +66,15 @@ const Card = React.memo(function Card({ c, query, expandedId, setExpandedId, cop
     <div className="tc-card">
       <div className="tc-card-main" onClick={() => setExpandedId(isOpen ? null : id)}>
         <div className="tc-card-body">
-          <div className="tc-codice"><Hl text={c.CodiceProgettoSAP} q={query} /></div>
-          <div className="tc-cliente"><Hl text={cliente} q={query} /></div>
+          <div className="tc-codice"><Hl text={c.CodiceElementoWBS} q={query} /></div>
+          <div className="tc-cliente"> <Hl text={location} q={query} /></div>
           {location && (
             <div className="tc-loc">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
                 <circle cx="12" cy="9" r="2.5" />
               </svg>
-              <Hl text={location} q={query} />
+              <Hl text={cliente} q={query} />
             </div>
           )}
         </div>
@@ -119,8 +120,8 @@ export default function TrovaCommessa({ commesse = [] }) {
 
   useEffect(() => { inputRef.current?.focus(); }, []);
   useEffect(() => { setVisibleCount(PAGE_SIZE); setExpandedId(null); }, [query]);
- // Guard against non-array data from failed API
-    const safeCommesse = useMemo(() => Array.isArray(commesse) ? commesse : [], [commesse]);
+  // Guard against non-array data from failed API
+  const safeCommesse = useMemo(() => Array.isArray(commesse) ? commesse : [], [commesse]);
 
   // Split commesse: primary (20C1880) vs rest
   const primary = useMemo(() =>
@@ -142,7 +143,7 @@ export default function TrovaCommessa({ commesse = [] }) {
   const hasMore = visibleCount < results.length;
 
   const handleCopy = useCallback((code) => {
-    navigator.clipboard.writeText(code).catch(() => {});
+    navigator.clipboard.writeText(code).catch(() => { });
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 1500);
   }, []);
