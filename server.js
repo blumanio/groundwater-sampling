@@ -21,35 +21,12 @@ app.use(express.urlencoded({ extended: true })); // Standard middleware
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// --- MongoDB Connection (Serverless-Safe) ---
-let cached = global.mongoose;
-if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
-}
+// --- MongoDB Connection ---
+mongoose.connect(process.env.MONGODB_URI)
+    .then(() => console.log('MongoDB database connection established successfully'))
+    .catch(err => console.error('MongoDB connection error:', err));
 
-async function connectDB() {
-  if (cached.conn) return cached.conn;
-  if (!cached.promise) {
-    cached.promise = mongoose.connect(process.env.MONGODB_URI, {
-      bufferCommands: false,
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-    });
-  }
-  cached.conn = await cached.promise;
-  return cached.conn;
-}
 
-// Ensure DB connection on every request
-app.use(async (req, res, next) => {
-  try {
-    await connectDB();
-    next();
-  } catch (err) {
-    console.error('DB connection failed:', err);
-    res.status(503).json({ message: 'Database unavailable', error: err.message });
-  }
-});
 // ============================================================================
 // 1. SCHEMAS
 // ============================================================================
