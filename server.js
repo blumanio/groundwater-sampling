@@ -593,6 +593,111 @@ app.post('/api/equipment/:id/return', async (req, res) => {
         res.status(500).json({ message: err.message });
     }
 });
+
+
+
+// GET /api/users — list all users (all roles can see)
+app.get('/api/users', async (req, res) => {
+    try {
+        const users = await User.find({}).select('-password').sort({ fullName: 1 });
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// POST /api/users — add new user (admin only)
+app.post('/api/users', async (req, res) => {
+    try {
+        const { email, fullName, role, phone, note } = req.body;
+        if (!email) return res.status(400).json({ message: 'Email obbligatoria' });
+
+        const existing = await User.findOne({ email: email.toLowerCase() });
+        if (existing) return res.status(409).json({ message: 'Email già registrata' });
+
+        const user = new User({
+            email: email.toLowerCase(),
+            fullName: fullName || '',
+            role: role || 'tecnico',
+            phone: phone || '',
+            note: note || '',
+        });
+        await user.save();
+        res.status(201).json(user);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// PUT /api/users/:id — update user (admin only)
+app.put('/api/users/:id', async (req, res) => {
+    try {
+        const { fullName, role, phone, note } = req.body;
+        // Note: email is NOT updatable
+        const user = await User.findByIdAndUpdate(
+            req.params.id,
+            { fullName, role, phone, note },
+            { new: true }
+        );
+        if (!user) return res.status(404).json({ message: 'Utente non trovato' });
+        res.json(user);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// DELETE /api/users/:id — delete user (admin only)
+app.delete('/api/users/:id', async (req, res) => {
+    try {
+        await User.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Utente eliminato' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// ── COMMESSE ROUTES ──────────────────────────────────────────
+
+// POST /api/commesse — add new commessa
+app.post('/api/commesse', async (req, res) => {
+    try {
+        const { CodiceProgettoSAP, Descrizione } = req.body;
+        if (!CodiceProgettoSAP || !Descrizione)
+            return res.status(400).json({ message: 'Codice e Descrizione obbligatori' });
+
+        const commessa = new Commessa({ CodiceProgettoSAP, Descrizione });
+        await commessa.save();
+        res.status(201).json(commessa);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// PUT /api/commesse/:id — update commessa
+app.put('/api/commesse/:id', async (req, res) => {
+    try {
+        const { CodiceProgettoSAP, Descrizione } = req.body;
+        const commessa = await Commessa.findByIdAndUpdate(
+            req.params.id,
+            { CodiceProgettoSAP, Descrizione },
+            { new: true }
+        );
+        if (!commessa) return res.status(404).json({ message: 'Commessa non trovata' });
+        res.json(commessa);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// DELETE /api/commesse/:id — delete commessa
+app.delete('/api/commesse/:id', async (req, res) => {
+    try {
+        await Commessa.findByIdAndDelete(req.params.id);
+        res.json({ message: 'Commessa eliminata' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
 //------------------------------------------------------------------------------------------------
 //--------------------------------------------------------------------------------------------------
 

@@ -10,19 +10,21 @@ const Navigation = ({ page, setPage }) => {
         { id: 'magazzino', label: 'Magazzino', icon: '🔧' },
         { id: 'timetracker', label: 'Time Tracker', icon: '⏱️' },
         { id: 'geology', label: 'Campiona', icon: '🌍' },
+        { id: 'team', label: 'Team', icon: '👥' },
+        { id: 'commesse', label: 'Commesse', icon: '📋' },
         // { id: 'dashboard', label: 'Dashboard', icon: '📊' },
         // { id: 'receipts', label: 'Scontrini', icon: '🧾' },
         // { id: 'schedule', label: 'Pianificazione', icon: '📅' },
-                // { id: 'aqtesolv', label: 'Pumping Test', icon: '📊' }, // Added new item
+        // { id: 'aqtesolv', label: 'Pumping Test', icon: '📊' }, // Added new item
         // { id: 'reports', label: 'Reports', icon: '📈' },
         // { id: 'rdlgenerator', label: 'RDL Generator', icon: '📄' },
         // { id: 'rdlreport', label: 'RDL Report', icon: '📄' },
-            // { id: 'bonificapro', label: 'Bonifica Pro', icon: '🧹' }, // Added new item
-            // { id: 'hydrogeopro', label: 'HydroGeo Pro', icon: '💧' }, // Added new item
+        // { id: 'bonificapro', label: 'Bonifica Pro', icon: '🧹' }, // Added new item
+        // { id: 'hydrogeopro', label: 'HydroGeo Pro', icon: '💧' }, // Added new item
 
 
-        
-        
+
+
     ];
 
     return (
@@ -51,27 +53,24 @@ const Navigation = ({ page, setPage }) => {
                     {navigationItems.map((item) => (
                         <button
                             key={item.id}
-                            className={`flex flex-col items-center justify-center flex-1 min-w-0 transition-all duration-200 relative ${
-                                page === item.id 
-                                    ? 'text-indigo-600' 
+                            className={`flex flex-col items-center justify-center flex-1 min-w-0 transition-all duration-200 relative ${page === item.id
+                                    ? 'text-indigo-600'
                                     : 'text-gray-500 active:bg-gray-50'
-                            }`}
+                                }`}
                             onClick={() => setPage(item.id)}
                             aria-label={item.label}
                         >
                             {page === item.id && (
                                 <div className="absolute top-0 left-0 right-0 h-0.5 bg-indigo-600"></div>
                             )}
-                            
-                            <span className={`text-xl mb-1 transition-transform duration-200 ${
-                                page === item.id ? 'scale-110' : ''
-                            }`}>
+
+                            <span className={`text-xl mb-1 transition-transform duration-200 ${page === item.id ? 'scale-110' : ''
+                                }`}>
                                 {item.icon}
                             </span>
-                            
-                            <span className={`text-xs font-medium truncate max-w-full px-1 ${
-                                page === item.id ? 'font-semibold' : ''
-                            }`}>
+
+                            <span className={`text-xs font-medium truncate max-w-full px-1 ${page === item.id ? 'font-semibold' : ''
+                                }`}>
                                 {item.label}
                             </span>
                         </button>

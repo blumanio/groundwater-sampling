@@ -10,6 +10,8 @@ import TimeTracker from './components/TimeTracker';
 import BonificaPro from './components/BonificaPro';
 import HydroGeoPro from './components/HydroGeoPro';
 import TrovaCommessa from './components/TrovaCommessa';
+import TeamPage from './components/TeamPage';
+import CommessePage from './components/CommessaPage';
 import Magazzino from './components/Magazzino';
 import Login from './components/Login';
 import config from './config';
@@ -88,8 +90,13 @@ const MainApp = () => {
                 return <TrovaCommessa commesse={commesse} />;
             case 'magazzino':
                 return <Magazzino />;
+            case 'team':
+                return <TeamPage />;
+            case 'commesse':
+                return <CommessePage commesse={commesse} />;
             default:
                 return <TrovaCommessa commesse={commesse} />;
+
         }
     };
 
