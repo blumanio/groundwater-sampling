@@ -32,7 +32,7 @@ const fmtDateTime = (iso) => {
     hour: '2-digit', minute: '2-digit',
   });
 };
-
+console.log("todayStr:", todayStr());
 const fmtDate = (iso) => {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('it-IT', {
