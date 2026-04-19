@@ -340,7 +340,7 @@ export default function RdlGenerator() {
       });
       if (!res.ok) throw new Error((await res.json()).message || 'Errore generazione');
       // Default filename: RDL_cantiere_data (es. RDL_SanBonico_19042026.xlsx)
-      const safeCantiere = (form.cantiere || 'sito').replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_');
+      const safeCantiere = (form.cantiere || 'sito').replace(/[^a-zA-Z0-9_-]/g, '_').replace(/_+/g, '_');
       const safeDate     = (form.data_str || '').replace(/\./g, '');
       const defaultName  = `RDL_${safeCantiere}_${safeDate}.xlsx`;
 
