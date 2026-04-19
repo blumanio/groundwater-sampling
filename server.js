@@ -313,37 +313,35 @@ app.post('/api/schedule/upload', upload.single('scheduleFile'), async (req, res)
 // ═══════════════════════════════════════════════════════════════════
 // 1. ADD THIS ROUTE TO server.js
 // ═══════════════════════════════════════════════════════════════════
-const { exec } = require('child_process');
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// rdl_generator_node.js  — metti nella root del server (stesso livello di server.js)
+// SOSTITUISCE rdl_generator.py — funziona su Vercel/serverless, niente Python
+//
+// INSTALL:  npm install exceljs
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── In server.js: sostituisci il blocco const { exec } = require('child_process')
+// ── e app.post('/api/rdl/genera', ...) con queste righe:
+
+const { generateRdl } = require('./rdl_generator_node');
 
 app.post('/api/rdl/genera', async (req, res) => {
     try {
-        const data = req.body;
-        const scriptPath = path.join(__dirname, 'rdl_generator.py');
+        const data      = req.body;
         const assetsDir = path.join(__dirname, 'assets', 'rdl');
 
-        const child = exec(
-            `python "${scriptPath}" "${assetsDir}"`,
-            { maxBuffer: 10 * 1024 * 1024 },
-            (err, stdout, stderr) => {
-                if (err) {
-                    console.error('RDL generation error:', stderr);
-                    return res.status(500).json({ message: 'Errore: ' + stderr });
-                }
-                const buffer = Buffer.from(stdout, 'base64');
-                const filename = `RDL_${data.commessa || 'export'}_${(data.data_str || '').replace(/\./g,'')}.xlsx`;
-                res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-                res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-                res.setHeader('Content-Length', buffer.length);
-                res.send(buffer);
-            }
-        );
+        const buffer   = await generateRdl(data, assetsDir);
+        const filename = `RDL_${data.commessa || 'export'}_${(data.data_str || '').replace(/\./g,'')}.xlsx`;
 
-        // Write JSON to stdin
-        child.stdin.write(JSON.stringify(data));
-        child.stdin.end();
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Length', buffer.length);
+        res.send(buffer);
 
     } catch (error) {
+        console.error('RDL generation error:', error);
         res.status(500).json({ message: error.message });
     }
 });
