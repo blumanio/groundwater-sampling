@@ -339,34 +339,43 @@ export default function RdlGenerator() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error((await res.json()).message || 'Errore generazione');
-      const filename = `RDL_${form.commessa}_${form.data_str.replace(/\./g, '')}.xlsx`;
+      // Default filename: RDL_cantiere_data (es. RDL_SanBonico_19042026.xlsx)
+      const safeCantiere = (form.cantiere || 'sito').replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_');
+      const safeDate     = (form.data_str || '').replace(/\./g, '');
+      const defaultName  = `RDL_${safeCantiere}_${safeDate}.xlsx`;
 
-      // Mobile (iOS + Android): a.click() su blob non funziona in modo affidabile.
-      // Soluzione universale: converti in base64 data URI e apri in nuova tab.
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const blob = await res.blob();
 
-      if (isMobile) {
-        // Leggi come ArrayBuffer → base64 → data URI → window.open
-        const arrayBuffer = await res.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-        const base64 = btoa(binary);
-        const dataUri = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64}`;
-        // Apre in nuova tab — iOS lo mostra in anteprima, Android lo scarica
-        window.open(dataUri, '_blank');
-      } else {
-        // Desktop: metodo standard blob + a.click()
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+      // ── Desktop Chrome/Edge: showSaveFilePicker → "Salva come" nativo ──────
+      if (window.showSaveFilePicker) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: defaultName,
+            types: [{
+              description: 'Excel Workbook',
+              accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
+            }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          return; // done
+        } catch (e) {
+          if (e.name === 'AbortError') return; // user cancelled — don't fall through
+          // Other error → fall through to fallback
+        }
       }
+
+      // ── Fallback: standard link click (Safari, Firefox, mobile) ───────────
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href    = url;
+      a.setAttribute('download', defaultName);
+      a.setAttribute('target', '_blank');
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
     } catch (e) {
       setError(e.message);
     } finally {
