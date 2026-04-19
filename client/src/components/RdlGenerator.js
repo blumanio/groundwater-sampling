@@ -339,13 +339,34 @@ export default function RdlGenerator() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error((await res.json()).message || 'Errore generazione');
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `RDL_${form.commessa}_${form.data_str.replace(/\./g, '')}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const filename = `RDL_${form.commessa}_${form.data_str.replace(/\./g, '')}.xlsx`;
+
+      // Mobile (iOS + Android): a.click() su blob non funziona in modo affidabile.
+      // Soluzione universale: converti in base64 data URI e apri in nuova tab.
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+      if (isMobile) {
+        // Leggi come ArrayBuffer → base64 → data URI → window.open
+        const arrayBuffer = await res.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        const base64 = btoa(binary);
+        const dataUri = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64}`;
+        // Apre in nuova tab — iOS lo mostra in anteprima, Android lo scarica
+        window.open(dataUri, '_blank');
+      } else {
+        // Desktop: metodo standard blob + a.click()
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
     } catch (e) {
       setError(e.message);
     } finally {
