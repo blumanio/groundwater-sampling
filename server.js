@@ -310,7 +310,43 @@ app.post('/api/schedule/upload', upload.single('scheduleFile'), async (req, res)
         res.status(500).json({ message: 'Error saving schedule.', error: error.message });
     }
 });
+// ═══════════════════════════════════════════════════════════════════
+// 1. ADD THIS ROUTE TO server.js
+// ═══════════════════════════════════════════════════════════════════
+const { exec } = require('child_process');
 
+
+app.post('/api/rdl/genera', async (req, res) => {
+    try {
+        const data = req.body;
+        const scriptPath = path.join(__dirname, 'rdl_generator.py');
+        const assetsDir = path.join(__dirname, 'assets', 'rdl');
+
+        const child = exec(
+            `python "${scriptPath}" "${assetsDir}"`,
+            { maxBuffer: 10 * 1024 * 1024 },
+            (err, stdout, stderr) => {
+                if (err) {
+                    console.error('RDL generation error:', stderr);
+                    return res.status(500).json({ message: 'Errore: ' + stderr });
+                }
+                const buffer = Buffer.from(stdout, 'base64');
+                const filename = `RDL_${data.commessa || 'export'}_${(data.data_str || '').replace(/\./g,'')}.xlsx`;
+                res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+                res.setHeader('Content-Length', buffer.length);
+                res.send(buffer);
+            }
+        );
+
+        // Write JSON to stdin
+        child.stdin.write(JSON.stringify(data));
+        child.stdin.end();
+
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
 // --- Geology & Site Routes ---
 app.get('/api/sites/summary', async (req, res) => {
     try {

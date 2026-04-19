@@ -16,6 +16,8 @@ import Magazzino from './components/Magazzino';
 import Login from './components/Login';
 import config from './config';
 import logo from './assets/LogoACR.jpg';
+import RdlGenerator from './components/RdlGenerator';
+
 
 const API_URL = config.API_URL;
 
@@ -94,6 +96,8 @@ const MainApp = () => {
                 return <TeamPage />;
             case 'commesse':
                 return <CommessePage commesse={commesse} />;
+            case 'rdlgenerator':
+                return <RdlGenerator />;
             default:
                 return <TrovaCommessa commesse={commesse} />;
 
@@ -135,7 +139,7 @@ const MainApp = () => {
             {/* Mobile Header */}
             <header className="md:hidden bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
                 <div className="px-4 py-3 flex items-center justify-between">
-                    <p className="text-lg font-semibold">Groundwater Field App</p>
+                    <p className="text-lg font-semibold">PERTACR</p>
                     <button
                         onClick={handleLogout}
                         className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"

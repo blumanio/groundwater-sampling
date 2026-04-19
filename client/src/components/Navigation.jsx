@@ -12,6 +12,7 @@ const Navigation = ({ page, setPage }) => {
         { id: 'geology', label: 'Campiona', icon: '🌍' },
         { id: 'team', label: 'Team', icon: '👥' },
         { id: 'commesse', label: 'Commesse', icon: '📋' },
+        { id: 'rdlgenerator', label: 'RDL Generator', icon: '📅' },
         // { id: 'dashboard', label: 'Dashboard', icon: '📊' },
         // { id: 'receipts', label: 'Scontrini', icon: '🧾' },
         // { id: 'schedule', label: 'Pianificazione', icon: '📅' },
