@@ -7,6 +7,7 @@ const multer = require('multer');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const nodemailer = require('nodemailer');
 const { put } = require('@vercel/blob');
 
 const app = express();
@@ -104,10 +105,38 @@ const SamplingEventSchema = new mongoose.Schema({
     notes: String
 });
 
+// Una singola taratura / verifica eseguita su uno strumento.
+// Storico completo: serve a dimostrare quale certificato era valido a una data.
+const CalibrationRecordSchema = new mongoose.Schema({
+    type: {
+        type: String,
+        enum: ['certificazione', 'taratura interna', 'verifica di campo', 'bump test'],
+        required: true
+    },
+    performedAt: { type: Date, required: true },
+    performedBy: { type: String },
+    provider: { type: String },           // laboratorio esterno (SIT/ACCREDIA)
+    certificateNumber: { type: String },
+    certificateUrl: { type: String },     // PDF su Vercel Blob
+    result: {
+        type: String,
+        enum: ['conforme', 'non conforme', 'conforme con riserva'],
+        default: 'conforme'
+    },
+    validUntil: { type: Date },
+    // Valori misurati durante la procedura (slope pH, ore lampada, ecc.)
+    readings: { type: mongoose.Schema.Types.Mixed, default: {} },
+    notes: { type: String },
+}, { timestamps: true });
+
 // Aggiungi questi campi allo schema Equipment esistente:
 const EquipmentSchema = new mongoose.Schema({
     name: { type: String, required: true },
-    category: { type: String, enum: ['Pompa', 'Generatore', 'Campionatore', 'Multiparametro', 'GPS', 'Altro'], default: 'Altro' },
+    category: {
+        type: String,
+        enum: ['Pompa', 'Generatore', 'Campionatore', 'Multiparametro', 'GPS', 'PID', 'Multigas', 'Termometro', 'Freatimetro', 'Altro'],
+        default: 'Altro'
+    },
     serialNumber: { type: String },
     notes: { type: String },
     // ❌ vecchio enum — cambia 'disponibile' con 'in magazzino'
@@ -121,13 +150,49 @@ const EquipmentSchema = new mongoose.Schema({
     assignedAt: { type: Date, default: null },
     assignedSite: { type: String, default: null },
     createdAt: { type: Date, default: Date.now },
+
+    // ── Anagrafica strumento ──────────────────────────────────────────────
+    brand: { type: String },
+    model: { type: String },
+    // Tipo di procedura di taratura applicabile (vedi CALIBRATION_GUIDES lato client)
+    instrumentType: {
+        type: String,
+        enum: ['multiparametrica', 'pid', 'multigas', 'termometro', 'freatimetro', 'altro'],
+        default: 'altro'
+    },
+    // Caratteristiche libere e dipendenti dal tipo: lunghezza cavo, eV lampada,
+    // sensori installati, range di misura... chiavi diverse per strumenti diversi.
+    specs: { type: mongoose.Schema.Types.Mixed, default: {} },
+
+    // ── Taratura e certificazione ─────────────────────────────────────────
+    requiresCalibration: { type: Boolean, default: false },
+    responsabile: { type: String, default: null },
+    responsabileEmail: { type: String, default: null },
+    certificationExpiry: { type: Date, default: null },
+    calibrationExpiry: { type: Date, default: null },
+    calibrationIntervalDays: { type: Number, default: 365 },
+    // Verifica di campo / bump test: intervallo breve, null = non richiesta
+    fieldCheckIntervalDays: { type: Number, default: null },
+    lastFieldCheckAt: { type: Date, default: null },
+    calibrations: { type: [CalibrationRecordSchema], default: [] },
+    // Traccia degli avvisi già inviati, per non ripetere la stessa notifica
+    notificationsSent: {
+        type: [{
+            kind: String,        // 'certificazione' | 'taratura'
+            threshold: Number,   // giorni di preavviso
+            dueDate: Date,
+            sentAt: Date,
+            to: String,
+        }],
+        default: []
+    },
 });
 
 
 const EventLogSchema = new mongoose.Schema({
     equipmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment', required: true },
     equipmentName: { type: String, required: true },
-    eventType: { type: String, enum: ['prelievo', 'riconsegna', 'modifica', 'manutenzione'], required: true },
+    eventType: { type: String, enum: ['prelievo', 'riconsegna', 'modifica', 'manutenzione', 'taratura'], required: true },
     createdBy: { type: String },
     site: { type: String },
     notes: { type: String },
@@ -455,6 +520,74 @@ app.post('/api/sites/:siteId/waste-logs', upload.single('wasteImage'), async (re
 
 
 
+// ── Calibration helpers ────────────────────────────────────────────────────
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+// Preavvisi in giorni, in ordine crescente: la ricerca sotto restituisce così
+// la soglia più stretta già superata (a 20 giorni dalla scadenza scatta il
+// preavviso "30", non di nuovo il "60"). 60 = tempo per prenotare il
+// laboratorio esterno, 0 = strumento scaduto.
+const NOTIFICATION_THRESHOLDS = [0, 7, 30, 60];
+
+const daysUntil = (date) => {
+    if (!date) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const target = new Date(date);
+    target.setHours(0, 0, 0, 0);
+    return Math.round((target - today) / MS_PER_DAY);
+};
+
+// Semaforo dello strumento: vince la più critica fra certificazione e taratura.
+const calibrationStatus = (eq) => {
+    if (!eq.requiresCalibration) {
+        return { level: 'non richiesto', daysLeft: null, nextDueDate: null, nextDueKind: null };
+    }
+    const candidates = [
+        { kind: 'certificazione', date: eq.certificationExpiry },
+        { kind: 'taratura', date: eq.calibrationExpiry },
+    ].filter(c => c.date);
+
+    if (!candidates.length) {
+        return { level: 'da pianificare', daysLeft: null, nextDueDate: null, nextDueKind: null };
+    }
+
+    const next = candidates.reduce((a, b) => (new Date(a.date) <= new Date(b.date) ? a : b));
+    const daysLeft = daysUntil(next.date);
+    const level = daysLeft < 0 ? 'scaduto' : daysLeft <= 30 ? 'in scadenza' : 'valido';
+    return { level, daysLeft, nextDueDate: next.date, nextDueKind: next.kind };
+};
+
+// Il corpo delle notifiche contiene nomi strumento inseriti dagli utenti:
+// vanno neutralizzati prima di finire in una mail HTML.
+const escapeHtml = (str) => String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const withCalibrationStatus = (doc) => {
+    const obj = typeof doc.toObject === 'function' ? doc.toObject() : doc;
+    return { ...obj, calibrationStatus: calibrationStatus(obj) };
+};
+
+let mailTransporter;
+const getMailTransporter = () => {
+    if (!process.env.SMTP_HOST) return null;
+    if (!mailTransporter) {
+        const port = Number(process.env.SMTP_PORT) || 587;
+        mailTransporter = nodemailer.createTransport({
+            host: process.env.SMTP_HOST,
+            port,
+            secure: port === 465,
+            auth: process.env.SMTP_USER
+                ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+                : undefined,
+        });
+    }
+    return mailTransporter;
+};
+
 // --- Equipment Routes ---
 // NOTE: /bookings routes must be registered before /:id to avoid Express matching "bookings" as an id.
 
@@ -592,7 +725,14 @@ app.post('/api/equipment/:id/assign', async (req, res) => {
             condition: 'ok',
         });
 
-        res.json(equipment);
+        // Avviso non bloccante: il tecnico sta prelevando uno strumento con
+        // taratura scaduta o in scadenza.
+        const calStatus = calibrationStatus(equipment);
+        const calibrationWarning = (calStatus.level === 'scaduto' || calStatus.level === 'in scadenza')
+            ? `${calStatus.nextDueKind} ${calStatus.level} (${calStatus.daysLeft} giorni)`
+            : null;
+
+        res.json({ ...equipment.toObject(), calibrationStatus: calStatus, calibrationWarning });
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -628,6 +768,252 @@ app.post('/api/equipment/:id/return', async (req, res) => {
     }
 });
 
+
+// ── STRUMENTI: TARATURA E CERTIFICAZIONE ──────────────────────────────────
+// NOTE: nessuna di queste rotte collide con /api/equipment/:id/(assign|return),
+// che richiedono un ultimo segmento letterale diverso.
+
+// GET /api/equipment/instruments — elenco strumenti con stato scadenze
+app.get('/api/equipment/instruments', async (req, res) => {
+    try {
+        const filter = req.query.all === 'true' ? {} : { requiresCalibration: true };
+        const items = await Equipment.find(filter).sort({ name: 1 });
+        res.json(items.map(withCalibrationStatus));
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching instruments', error: err.message });
+    }
+});
+
+// GET /api/equipment/expiring?days=30 — scadenze entro N giorni (incl. scadute)
+app.get('/api/equipment/expiring', async (req, res) => {
+    try {
+        const days = Number(req.query.days) || 30;
+        const items = await Equipment.find({ requiresCalibration: true });
+        const due = items
+            .map(withCalibrationStatus)
+            .filter(i => i.calibrationStatus.daysLeft !== null && i.calibrationStatus.daysLeft <= days)
+            .sort((a, b) => a.calibrationStatus.daysLeft - b.calibrationStatus.daysLeft);
+        res.json(due);
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching expiring instruments', error: err.message });
+    }
+});
+
+// POST /api/equipment/:id/calibrations — registra una taratura/verifica
+app.post('/api/equipment/:id/calibrations', async (req, res) => {
+    try {
+        const {
+            type, performedAt, performedBy, provider, certificateNumber,
+            certificateUrl, result, validUntil, readings, notes,
+        } = req.body;
+
+        if (!type) return res.status(400).json({ message: 'Tipo di taratura obbligatorio' });
+
+        const equipment = await Equipment.findById(req.params.id);
+        if (!equipment) return res.status(404).json({ message: 'Strumento non trovato' });
+
+        const performed = performedAt ? new Date(performedAt) : new Date();
+        const isFieldCheck = type === 'verifica di campo' || type === 'bump test';
+        const failed = result === 'non conforme';
+
+        // Se non viene indicata una scadenza, la calcoliamo dall'intervallo dello
+        // strumento. Una taratura non conforme non ha validità.
+        let expiry = validUntil ? new Date(validUntil) : null;
+        if (!expiry && !isFieldCheck && !failed) {
+            const interval = equipment.calibrationIntervalDays || 365;
+            expiry = new Date(performed.getTime() + interval * MS_PER_DAY);
+        }
+        if (failed) expiry = null;
+
+        equipment.calibrations.push({
+            type, performedAt: performed, performedBy, provider, certificateNumber,
+            certificateUrl, result: result || 'conforme', validUntil: expiry,
+            readings: readings || {}, notes,
+        });
+
+        // Una taratura non conforme non estende la validità: lo strumento resta
+        // da rimettere in servizio, e le misure fatte dall'ultima taratura buona
+        // vanno considerate sospette.
+        if (failed) {
+            equipment.status = 'fuori servizio';
+        } else if (isFieldCheck) {
+            equipment.lastFieldCheckAt = performed;
+        } else if (type === 'certificazione') {
+            equipment.certificationExpiry = expiry;
+        } else {
+            equipment.calibrationExpiry = expiry;
+        }
+
+        await equipment.save();
+
+        await EventLog.create({
+            equipmentId: equipment._id,
+            equipmentName: equipment.name,
+            eventType: 'taratura',
+            createdBy: performedBy,
+            notes: `${type}${provider ? ` — ${provider}` : ''}${notes ? ` — ${notes}` : ''}`,
+            condition: result || 'conforme',
+        });
+
+        res.status(201).json(withCalibrationStatus(equipment));
+    } catch (err) {
+        res.status(400).json({ message: 'Error saving calibration', error: err.message });
+    }
+});
+
+// POST /api/equipment/notifications/run — calcola gli avvisi di scadenza.
+// Pensato per essere chiamato da uno scheduler (Power Automate, Vercel Cron,
+// GitHub Actions...) con header `x-api-key`. Restituisce i messaggi da inviare;
+// se SMTP è configurato li invia anche direttamente.
+app.post('/api/equipment/notifications/run', async (req, res) => {
+    const expectedSecret = process.env.NOTIFICATIONS_SECRET;
+    if (!expectedSecret) {
+        return res.status(503).json({ message: 'NOTIFICATIONS_SECRET non configurato sul server' });
+    }
+    if (req.get('x-api-key') !== expectedSecret) {
+        return res.status(401).json({ message: 'Non autorizzato' });
+    }
+
+    try {
+        const dryRun = String(req.query.dryRun) === 'true';
+        const managerEmail = process.env.NOTIFICATIONS_MANAGER_EMAIL || null;
+        const transporter = getMailTransporter();
+
+        const users = await User.find({}).select('email fullName');
+        const emailByName = new Map(
+            users.filter(u => u.fullName).map(u => [u.fullName.trim().toLowerCase(), u.email])
+        );
+        const emailFor = (name) => {
+            if (!name) return null;
+            if (name.includes('@')) return name;
+            return emailByName.get(name.trim().toLowerCase()) || null;
+        };
+
+        const instruments = await Equipment.find({ requiresCalibration: true });
+        const notifications = [];
+        const skipped = [];
+
+        for (const eq of instruments) {
+            const checks = [
+                { kind: 'certificazione', dueDate: eq.certificationExpiry },
+                { kind: 'taratura', dueDate: eq.calibrationExpiry },
+            ].filter(c => c.dueDate);
+
+            let dirty = false;
+
+            for (const check of checks) {
+                const daysLeft = daysUntil(check.dueDate);
+                // Soglie crescenti: il primo match è la più stretta già superata.
+                const threshold = NOTIFICATION_THRESHOLDS.find(t => daysLeft <= t);
+                if (threshold === undefined) continue;   // scadenza ancora lontana
+
+                const dueIso = new Date(check.dueDate).toISOString();
+                const alreadySent = eq.notificationsSent.some(n =>
+                    n.kind === check.kind &&
+                    n.threshold === threshold &&
+                    n.dueDate && new Date(n.dueDate).toISOString() === dueIso
+                );
+                if (alreadySent) continue;
+
+                const recipients = [];
+                if (eq.responsabileEmail) recipients.push(eq.responsabileEmail);
+                const holder = emailFor(eq.assignedTo);
+                if (holder) recipients.push(holder);
+                // Sotto i 7 giorni (e da scaduto) coinvolgiamo anche il responsabile.
+                if (threshold <= 7 && managerEmail) recipients.push(managerEmail);
+
+                const to = [...new Set(recipients.filter(Boolean))];
+                if (!to.length) {
+                    // Nessun destinatario: non marchiamo come inviato, così l'avviso
+                    // riparte appena viene assegnato un responsabile.
+                    skipped.push({ instrument: eq.name, kind: check.kind, reason: 'nessun destinatario' });
+                    continue;
+                }
+
+                const label = `${eq.brand ? `${eq.brand} ` : ''}${eq.name}${eq.serialNumber ? ` (S/N ${eq.serialNumber})` : ''}`;
+                const dueDateLabel = new Date(check.dueDate).toLocaleDateString('it-IT');
+                const overdue = daysLeft < 0;
+                const subject = overdue
+                    ? `[SCADUTO] ${check.kind} — ${label}`
+                    : `Scadenza ${check.kind} fra ${daysLeft} giorni — ${label}`;
+                const body = [
+                    overdue
+                        ? `La ${check.kind} dello strumento è SCADUTA da ${Math.abs(daysLeft)} giorni.`
+                        : `La ${check.kind} dello strumento scade fra ${daysLeft} giorni.`,
+                    '',
+                    `Strumento:    ${label}`,
+                    `Categoria:    ${eq.category}`,
+                    `Scadenza:     ${dueDateLabel}`,
+                    `Responsabile: ${eq.responsabile || '—'}`,
+                    `In uso da:    ${eq.assignedTo || '—'}`,
+                    '',
+                    overdue
+                        ? 'Lo strumento non deve essere utilizzato per misure ufficiali finché non viene ritarato.'
+                        : 'Pianificare la taratura: i laboratori esterni richiedono in genere 2-4 settimane.',
+                ].join('\n');
+
+                const notification = {
+                    equipmentId: eq._id,
+                    instrument: label,
+                    kind: check.kind,
+                    threshold,
+                    daysLeft,
+                    dueDate: check.dueDate,
+                    to,
+                    // Pronti all'uso per Power Automate / Outlook, che vuole una
+                    // stringa di destinatari e un corpo HTML.
+                    toEmails: to.join(';'),
+                    subject,
+                    body,
+                    bodyHtml: `<p>${escapeHtml(body).replace(/\n/g, '<br>')}</p>`,
+                };
+
+                let delivered = true;
+                if (transporter && !dryRun) {
+                    try {
+                        await transporter.sendMail({
+                            from: process.env.SMTP_FROM || process.env.SMTP_USER,
+                            to: to.join(', '),
+                            subject,
+                            text: body,
+                        });
+                    } catch (mailErr) {
+                        delivered = false;
+                        notification.error = mailErr.message;
+                    }
+                }
+
+                notifications.push(notification);
+
+                // Marchiamo come inviato solo se non c'è stato un errore SMTP,
+                // altrimenti l'avviso viene riproposto alla prossima esecuzione.
+                if (!dryRun && delivered) {
+                    eq.notificationsSent.push({
+                        kind: check.kind,
+                        threshold,
+                        dueDate: check.dueDate,
+                        sentAt: new Date(),
+                        to: to.join(', '),
+                    });
+                    dirty = true;
+                }
+            }
+
+            if (dirty) await eq.save();
+        }
+
+        res.json({
+            ranAt: new Date(),
+            dryRun,
+            deliveredBy: transporter ? 'smtp' : 'caller',
+            count: notifications.length,
+            notifications,
+            skipped,
+        });
+    } catch (err) {
+        res.status(500).json({ message: 'Error running notifications', error: err.message });
+    }
+});
 
 
 // GET /api/users — list all users (all roles can see)

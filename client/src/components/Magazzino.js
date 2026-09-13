@@ -5,12 +5,13 @@ import { getLoggedInUser } from '../utils/utils';
 const API_URL = config.API_URL;
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const CATEGORIES = ['Pompa', 'Generatore', 'Campionatore', 'Multiparametro', 'GPS', 'Altro'];
+const CATEGORIES = ['Pompa', 'Generatore', 'Campionatore', 'Multiparametro', 'GPS', 'PID', 'Multigas', 'Termometro', 'Freatimetro', 'Altro'];
 const STATUSES = ['in magazzino', 'in uso', 'manutenzione', 'fuori servizio'];
 
 const CATEGORY_ICONS = {
   Pompa: '💧', Generatore: '⚡', Campionatore: '🧪',
-  Multiparametro: '📊', GPS: '📍', Altro: '🔧',
+  Multiparametro: '📊', GPS: '📍', PID: '🌫️', Multigas: '☣️',
+  Termometro: '🌡️', Freatimetro: '📏', Altro: '🔧',
 };
 
 const STATUS_META = {

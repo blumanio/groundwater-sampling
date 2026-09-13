@@ -8,6 +8,7 @@ const Navigation = ({ page, setPage }) => {
     const navigationItems = [
         { id: 'trovacommessa', label: 'Trova Commessa', icon: '🔍' }, // Added new item
         { id: 'magazzino', label: 'Magazzino', icon: '🔧' },
+        { id: 'strumenti', label: 'Strumenti', icon: '🔬' },
         { id: 'timetracker', label: 'Time Tracker', icon: '⏱️' },
         { id: 'geology', label: 'Campiona', icon: '🌍' },
         { id: 'team', label: 'Team', icon: '👥' },
