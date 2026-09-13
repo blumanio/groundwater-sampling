@@ -13,6 +13,7 @@ import TrovaCommessa from './components/TrovaCommessa';
 import TeamPage from './components/TeamPage';
 import CommessePage from './components/CommessaPage';
 import Magazzino from './components/Magazzino';
+import Strumenti from './components/Strumenti';
 import Login from './components/Login';
 import config from './config';
 import logo from './assets/LogoACR.jpg';
@@ -92,6 +93,8 @@ const MainApp = () => {
                 return <TrovaCommessa commesse={commesse} />;
             case 'magazzino':
                 return <Magazzino />;
+            case 'strumenti':
+                return <Strumenti />;
             case 'team':
                 return <TeamPage />;
             case 'commesse':
