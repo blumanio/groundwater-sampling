@@ -557,6 +557,15 @@ const calibrationStatus = (eq) => {
     return { level, daysLeft, nextDueDate: next.date, nextDueKind: next.kind };
 };
 
+// Il corpo delle notifiche contiene nomi strumento inseriti dagli utenti:
+// vanno neutralizzati prima di finire in una mail HTML.
+const escapeHtml = (str) => String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
 const withCalibrationStatus = (doc) => {
     const obj = typeof doc.toObject === 'function' ? doc.toObject() : doc;
     return { ...obj, calibrationStatus: calibrationStatus(obj) };
@@ -951,8 +960,12 @@ app.post('/api/equipment/notifications/run', async (req, res) => {
                     daysLeft,
                     dueDate: check.dueDate,
                     to,
+                    // Pronti all'uso per Power Automate / Outlook, che vuole una
+                    // stringa di destinatari e un corpo HTML.
+                    toEmails: to.join(';'),
                     subject,
                     body,
+                    bodyHtml: `<p>${escapeHtml(body).replace(/\n/g, '<br>')}</p>`,
                 };
 
                 let delivered = true;
